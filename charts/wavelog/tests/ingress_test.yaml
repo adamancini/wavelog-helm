@@ -1,0 +1,35 @@
+suite: ingress
+templates:
+  - ingress.yaml
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: routes the host to the Service's named port
+    set:
+      ingress.enabled: true
+      ingress.host: wavelog.example.com
+    asserts:
+      - isKind: {of: Ingress}
+      - equal: {path: "spec.rules[0].host", value: wavelog.example.com}
+      - equal: {path: "spec.rules[0].http.paths[0].path", value: /}
+      - equal: {path: "spec.rules[0].http.paths[0].pathType", value: Prefix}
+      - equal: {path: "spec.rules[0].http.paths[0].backend.service.name", value: RELEASE-NAME-wavelog}
+      - equal: {path: "spec.rules[0].http.paths[0].backend.service.port.name", value: http}
+  - it: passes className, annotations and tls through
+    set:
+      ingress.enabled: true
+      ingress.host: wavelog.example.com
+      ingress.className: nginx
+      ingress.annotations: {example.com/note: "yes"}
+      ingress.tls:
+        - secretName: wavelog-tls
+          hosts: [wavelog.example.com]
+    asserts:
+      - equal: {path: spec.ingressClassName, value: nginx}
+      - equal: {path: 'metadata.annotations["example.com/note"]', value: "yes"}
+      - equal: {path: "spec.tls[0].secretName", value: wavelog-tls}
+  - it: requires a host
+    set: {ingress.enabled: true}
+    asserts:
+      - failedTemplate: {errorMessage: ingress.host is required when ingress.enabled=true}

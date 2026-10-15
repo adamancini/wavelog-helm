@@ -25,6 +25,7 @@ spec:
           {{- end }}
         spec:
           restartPolicy: Never
+          automountServiceAccountToken: false
           serviceAccountName: {{ include "wavelog.serviceAccountName" . }}
           {{- with .Values.imagePullSecrets }}
           imagePullSecrets:
@@ -35,6 +36,8 @@ spec:
             runAsUser: 999
             runAsGroup: 999
             fsGroup: 999
+            seccompProfile:
+              type: RuntimeDefault
           initContainers:
             # Volumes such as local-path ignore fsGroup, so hand the claim to
             # the unprivileged mysql user (uid 999) before the dump runs.

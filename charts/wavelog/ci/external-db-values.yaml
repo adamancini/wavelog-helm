@@ -1,4 +1,3 @@
-# Declarative install arrives in a later task; use wizard mode until then.
 baseUrl: https://wavelog.example.com/
 install:
   mode: wizard

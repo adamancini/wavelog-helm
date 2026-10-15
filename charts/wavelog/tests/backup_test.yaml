@@ -114,3 +114,17 @@ tests:
     asserts:
       - isKind: {of: ConfigMap}
       - matchRegex: {path: "data['backup.sh']", pattern: "mariadb-dump"}
+  - it: keeps the backup PVC on uninstall by default
+    template: backup-pvc.yaml
+    asserts:
+      - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
+  - it: drops the keep annotation when backup.persistence.keep is false
+    template: backup-pvc.yaml
+    set: {backup.persistence.keep: false}
+    asserts:
+      - notExists: {path: metadata.annotations}
+  - it: hardens the backup pod
+    template: backup-cronjob.yaml
+    asserts:
+      - equal: {path: spec.jobTemplate.spec.template.spec.automountServiceAccountToken, value: false}
+      - equal: {path: spec.jobTemplate.spec.template.spec.securityContext.seccompProfile.type, value: RuntimeDefault}

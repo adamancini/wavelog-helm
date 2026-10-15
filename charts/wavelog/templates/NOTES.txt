@@ -5,5 +5,32 @@ Web UI (port-forward):
   Then open http://localhost:8080
 {{- if eq .Values.install.mode "wizard" }}
 
-install.mode=wizard: complete the web installer on first visit.
+install.mode=wizard: open {{ .Values.baseUrl | default "your site URL" }}{{ if and .Values.baseUrl (not (hasSuffix "/" .Values.baseUrl)) }}/{{ end }}install/ and complete the web installer.
+{{- if .Values.mariadb.enabled }}
+Enter these database values:
+  Host:     {{ include "wavelog.db.host" . }}
+  Name:     {{ include "wavelog.db.name" . }}
+  User:     {{ include "wavelog.db.user" . }}
+  Password: kubectl get secret {{ include "wavelog.db.secretName" . }} -n {{ .Release.Namespace }} -o jsonpath='{.data.{{ include "wavelog.db.passwordKey" . }}}' | base64 -d
+{{- else }}
+Enter your external database host, name and user (password from Secret {{ include "wavelog.db.secretName" . }}).
+{{- end }}
+{{- else }}
+
+install.mode=declarative: sign in as "{{ .Values.install.admin.username }}". Read the admin password with:
+  kubectl get secret {{ include "wavelog.admin.secretName" . }} -n {{ .Release.Namespace }} -o jsonpath='{.data.{{ .Values.install.admin.passwordKey }}}' | base64 -d; echo
+{{- end }}
+{{- $genApp := and (eq .Values.install.mode "declarative") (or (not .Values.config.existingSecret) (not .Values.install.admin.existingSecret)) }}
+{{- $genDb := and .Values.mariadb.enabled (not .Values.mariadb.auth.existingSecret) }}
+{{- if or $genApp $genDb }}
+
+WARNING: this release uses chart-generated secrets (
+{{- if $genApp }}{{ include "wavelog.fullname" . }}-app{{ end }}
+{{- if and $genApp $genDb }}, {{ end }}
+{{- if $genDb }}{{ include "wavelog.mariadb.fullname" . }}{{ end }}). They are kept across
+`helm upgrade` through a cluster lookup, which does not work with `helm template`,
+`helm install --dry-run` or GitOps renderers that never talk to the cluster: those
+would generate new values on every render. Before using such a renderer, pin the
+values with config.existingSecret, install.admin.existingSecret and
+mariadb.auth.existingSecret.
 {{- end }}

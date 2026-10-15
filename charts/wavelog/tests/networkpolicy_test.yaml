@@ -1,0 +1,55 @@
+suite: networkpolicy
+templates:
+  - networkpolicy.yaml
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: allows the app pod ingress on port 80 only
+    set: {networkPolicy.enabled: true}
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-wavelog
+    asserts:
+      - equal: {path: 'spec.podSelector.matchLabels["app.kubernetes.io/component"]', value: wavelog}
+      - equal: {path: spec.policyTypes, value: [Ingress]}
+      - lengthEqual: {path: spec.ingress, count: 1}
+      - equal: {path: "spec.ingress[0].ports", value: [{port: 80, protocol: TCP}]}
+      - notExists: {path: "spec.ingress[0].from"}
+  - it: allows only the proxy port with the oauth2-proxy sidecar
+    set:
+      networkPolicy.enabled: true
+      auth.mode: header
+      auth.header.jwksUri: https://idp.example.com/certs
+      oauth2Proxy: {enabled: true, issuerUrl: "https://idp.example.com", existingSecret: s}
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-wavelog
+    asserts:
+      - equal: {path: "spec.ingress[0].ports", value: [{port: 4180, protocol: TCP}]}
+  - it: restricts MariaDB ingress to Wavelog and backup pods on 3306
+    set: {networkPolicy.enabled: true, backup.enabled: true}
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-wavelog-mariadb
+    asserts:
+      - equal: {path: 'spec.podSelector.matchLabels["app.kubernetes.io/component"]', value: mariadb}
+      - equal: {path: "spec.ingress[0].ports", value: [{port: 3306, protocol: TCP}]}
+      - equal: {path: 'spec.ingress[0].from[0].podSelector.matchLabels["app.kubernetes.io/component"]', value: wavelog}
+      - equal: {path: 'spec.ingress[0].from[1].podSelector.matchLabels["app.kubernetes.io/component"]', value: backup}
+      - equal: {path: 'spec.ingress[0].from[0].podSelector.matchLabels["app.kubernetes.io/instance"]', value: RELEASE-NAME}
+  - it: admits only Wavelog pods to MariaDB when backups are off
+    set: {networkPolicy.enabled: true}
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-wavelog-mariadb
+    asserts:
+      - lengthEqual: {path: "spec.ingress[0].from", count: 1}
+  - it: omits the MariaDB policy with an external database
+    set:
+      networkPolicy.enabled: true
+      mariadb.enabled: false
+      externalDatabase: {host: db.example.com, existingSecret: s}
+    asserts:
+      - hasDocuments: {count: 1}
+      - equal: {path: metadata.name, value: RELEASE-NAME-wavelog}

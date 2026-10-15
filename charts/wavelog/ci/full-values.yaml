@@ -1,0 +1,39 @@
+# Exercises every optional template together (lint and render only).
+baseUrl: https://wavelog.example.com/
+install:
+  mode: declarative
+apiKeys:
+  - description: logger
+    rights: rw
+    user: admin
+    existingSecret: wavelog-apikey
+    secretKey: api-key
+auth:
+  mode: header
+  header:
+    jwksUri: https://idp.example.com/realms/example/protocol/openid-connect/certs
+    createUsers: true
+    adminIdentity:
+      issuer: https://idp.example.com/realms/example
+      subject: 00000000-0000-0000-0000-000000000001
+oauth2Proxy:
+  enabled: true
+  issuerUrl: https://idp.example.com/realms/example
+  existingSecret: wavelog-oauth2-proxy
+backup:
+  enabled: true
+ingress:
+  enabled: true
+  className: nginx
+  host: wavelog.example.com
+  tls:
+    - secretName: wavelog-tls
+      hosts: [wavelog.example.com]
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: example-gateway
+      namespace: gateway-system
+  hostnames: [wavelog.example.com]
+networkPolicy:
+  enabled: true

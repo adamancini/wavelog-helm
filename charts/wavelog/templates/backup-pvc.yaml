@@ -3,6 +3,10 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "wavelog.backup.claimName" . }}
+  {{- if .Values.backup.persistence.keep }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
   labels:
     {{- include "wavelog.labels" . | nindent 4 }}
     app.kubernetes.io/component: backup

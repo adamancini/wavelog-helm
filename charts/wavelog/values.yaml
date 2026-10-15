@@ -145,6 +145,9 @@ persistence:
   accessModes:
     - ReadWriteOnce
   existingClaim: ""
+  # Annotate the data PVC with helm.sh/resource-policy: keep so `helm uninstall`
+  # leaves the data in place. Delete the claim by hand to remove it.
+  keep: true
 
 backup:
   enabled: false
@@ -154,11 +157,36 @@ backup:
     storageClass: ""
     size: 10Gi
     existingClaim: ""
+    # Keep the backup PVC on `helm uninstall` (helm.sh/resource-policy: keep).
+    keep: true
   resources: {}
 
 service:
   type: ClusterIP
   port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # Required when enabled. Add a tls entry for HTTPS, e.g.
+  #   - secretName: wavelog-tls
+  #     hosts: [wavelog.example.com]
+  host: ""
+  tls: []
+
+# Gateway API HTTPRoute. parentRefs is required when enabled.
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs: []
+  hostnames: []
+
+# Ingress to the app pod is limited to the Service target port and ingress to
+# the bundled MariaDB to the Wavelog and backup pods. Egress is not restricted
+# (Wavelog calls LoTW, Club Log, eQSL, QRZ and the JWKS URI).
+networkPolicy:
+  enabled: false
 
 serviceAccount:
   create: true

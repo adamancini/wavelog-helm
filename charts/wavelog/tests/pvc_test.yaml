@@ -15,3 +15,10 @@ tests:
     set: {persistence.enabled: false}
     asserts:
       - hasDocuments: {count: 0}
+  - it: keeps the claim on uninstall by default
+    asserts:
+      - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
+  - it: drops the keep annotation when persistence.keep is false
+    set: {persistence.keep: false}
+    asserts:
+      - notExists: {path: metadata.annotations}

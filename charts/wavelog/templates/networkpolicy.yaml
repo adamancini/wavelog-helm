@@ -1,0 +1,48 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "wavelog.fullname" . }}
+  labels:
+    {{- include "wavelog.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "wavelog.appSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only the Service target port; the proxy port with the oauth2-proxy sidecar.
+    - ports:
+        - port: {{ ternary 4180 80 .Values.oauth2Proxy.enabled }}
+          protocol: TCP
+{{- if .Values.mariadb.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "wavelog.mariadb.fullname" . }}
+  labels:
+    {{- include "wavelog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "wavelog.mariadb.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "wavelog.appSelectorLabels" . | nindent 14 }}
+        {{- if .Values.backup.enabled }}
+        - podSelector:
+            matchLabels:
+              {{- include "wavelog.backup.selectorLabels" . | nindent 14 }}
+        {{- end }}
+      ports:
+        - port: 3306
+          protocol: TCP
+{{- end }}
+{{- end }}

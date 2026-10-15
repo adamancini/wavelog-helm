@@ -1,0 +1,26 @@
+suite: httproute
+templates:
+  - httproute.yaml
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: attaches to the parent gateway and targets the Service port
+    set:
+      httpRoute.enabled: true
+      httpRoute.parentRefs:
+        - {name: example-gateway, namespace: gateway-system}
+      httpRoute.hostnames: [wavelog.example.com]
+      service.port: 8080
+    asserts:
+      - isKind: {of: HTTPRoute}
+      - equal: {path: apiVersion, value: gateway.networking.k8s.io/v1}
+      - equal: {path: "spec.parentRefs[0].name", value: example-gateway}
+      - equal: {path: "spec.hostnames[0]", value: wavelog.example.com}
+      - equal: {path: "spec.rules[0].backendRefs[0].name", value: RELEASE-NAME-wavelog}
+      - equal: {path: "spec.rules[0].backendRefs[0].port", value: 8080}
+      - equal: {path: "spec.rules[0].matches[0].path.value", value: /}
+  - it: requires parentRefs
+    set: {httpRoute.enabled: true}
+    asserts:
+      - failedTemplate: {errorMessage: httpRoute.parentRefs is required when httpRoute.enabled=true}
