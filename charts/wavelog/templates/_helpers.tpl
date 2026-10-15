@@ -54,14 +54,46 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
-Probe path. Before the web installer has run, Wavelog redirects every page to
+Readiness probe path. Liveness always uses /favicon.ico so a DB outage never
+restarts the pod. Before the web installer has run, Wavelog redirects every page to
 /install/, which redirects to itself until a session cookie is presented, so
 cookie-less kubelet probes loop. In wizard mode probe a static file instead.
 */}}
-{{- define "wavelog.probePath" -}}
+{{- define "wavelog.readinessPath" -}}
 {{- if eq .Values.install.mode "wizard" -}}
 /favicon.ico
 {{- else -}}
 /index.php/user/login
 {{- end -}}
+{{- end -}}
+
+{{- define "wavelog.writablePaths" -}}
+/var/www/html/uploads /var/www/html/userdata /var/www/html/backup /var/www/html/images/eqsl_card_images /var/www/html/application/cache /var/www/html/application/logs
+{{- if eq .Values.install.mode "wizard" }} /var/www/html/application/config/docker{{ end }}
+{{- end -}}
+
+{{- define "wavelog.volumeMounts" -}}
+- name: data
+  mountPath: /var/www/html/uploads
+  subPath: uploads
+- name: data
+  mountPath: /var/www/html/userdata
+  subPath: userdata
+- name: data
+  mountPath: /var/www/html/backup
+  subPath: backup
+- name: data
+  mountPath: /var/www/html/images/eqsl_card_images
+  subPath: images/eqsl_card_images
+{{- if eq .Values.install.mode "wizard" }}
+- name: data
+  mountPath: /var/www/html/application/config/docker
+  subPath: config
+{{- end }}
+- name: cache
+  mountPath: /var/www/html/application/cache
+  subPath: cache
+- name: cache
+  mountPath: /var/www/html/application/logs
+  subPath: logs
 {{- end -}}

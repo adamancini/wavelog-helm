@@ -25,9 +25,9 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content: {name: DISABLE_CRON, value: "true"}
-  - it: probes the login route
+  - it: liveness is DB-independent, readiness checks login in declarative mode
     asserts:
-      - equal: {path: "spec.template.spec.containers[0].livenessProbe.httpGet.path", value: /index.php/user/login}
+      - equal: {path: "spec.template.spec.containers[0].livenessProbe.httpGet.path", value: /favicon.ico}
       - equal: {path: "spec.template.spec.containers[0].readinessProbe.httpGet.path", value: /index.php/user/login}
       - equal: {path: "spec.template.spec.containers[0].livenessProbe.initialDelaySeconds", value: 30}
   - it: mounts persistent data via subPaths
@@ -78,3 +78,29 @@ tests:
     asserts:
       - equal: {path: "spec.template.spec.containers[0].livenessProbe.httpGet.path", value: /favicon.ico}
       - equal: {path: "spec.template.spec.containers[0].readinessProbe.httpGet.path", value: /favicon.ico}
+  - it: runs volume-permissions init container first as root
+    asserts:
+      - equal: {path: "spec.template.spec.initContainers[0].name", value: volume-permissions}
+      - equal: {path: "spec.template.spec.initContainers[0].securityContext.runAsUser", value: 0}
+      - equal: {path: "spec.template.spec.initContainers[0].image", value: "ghcr.io/wavelog/wavelog:3.2.4"}
+      - equal:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          value:
+            - {name: data, mountPath: /var/www/html/uploads, subPath: uploads}
+            - {name: data, mountPath: /var/www/html/userdata, subPath: userdata}
+            - {name: data, mountPath: /var/www/html/backup, subPath: backup}
+            - {name: data, mountPath: /var/www/html/images/eqsl_card_images, subPath: images/eqsl_card_images}
+            - {name: cache, mountPath: /var/www/html/application/cache, subPath: cache}
+            - {name: cache, mountPath: /var/www/html/application/logs, subPath: logs}
+  - it: init container mounts match the main container in wizard mode
+    set: {install.mode: wizard}
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content: {name: data, mountPath: /var/www/html/application/config/docker, subPath: config}
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: application/config/docker
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: chown 999:33
