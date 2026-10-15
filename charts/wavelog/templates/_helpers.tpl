@@ -183,8 +183,18 @@ app.kubernetes.io/component: mariadb
 {{- fail "auth.mode must be local or header" -}}
 {{- end -}}
 {{- if eq $mode "header" -}}
+{{- if ne .Values.install.mode "declarative" -}}
+{{- fail "auth.mode=header requires install.mode=declarative" -}}
+{{- end -}}
 {{- $h := .Values.auth.header -}}
 {{- $_ := required "auth.header.jwksUri is required when auth.mode=header" $h.jwksUri -}}
+{{- /* Keep in sync with WL_SSO_KEYS in files/bootstrap.php. */ -}}
+{{- $mapped := list "auth_header_jwks_uri" "auth_header_accesstoken" "auth_header_create" "auth_header_allow_direct_login" "auth_header_hide_password_field" "auth_header_text" "auth_header_url_logout" -}}
+{{- range $k, $_ := ($h.extra | default dict) -}}
+{{- if has $k $mapped -}}
+{{- fail (printf "auth.header.extra must not set %s; use the dedicated auth.header value" $k) -}}
+{{- end -}}
+{{- end -}}
 {{- $id := $h.adminIdentity | default dict -}}
 {{- if ne (empty $id.issuer) (empty $id.subject) -}}
 {{- fail "auth.header.adminIdentity needs both issuer and subject" -}}

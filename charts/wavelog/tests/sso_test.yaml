@@ -71,3 +71,28 @@ tests:
           path: spec.template.spec.initContainers[1].env
           content: {name: WL_ADMIN_SUB}
           any: true
+  - it: requires declarative install mode for header auth
+    set:
+      install.mode: wizard
+      auth.mode: header
+      auth.header.jwksUri: http://idp.example.com/jwks.json
+    asserts:
+      - failedTemplate:
+          errorMessage: auth.mode=header requires install.mode=declarative
+  - it: rejects auth.header.extra overriding a mapped key
+    set:
+      auth.mode: header
+      auth.header.jwksUri: http://idp.example.com/jwks.json
+      auth.header.extra: {auth_header_jwks_uri: ""}
+    asserts:
+      - failedTemplate:
+          errorMessage: auth.header.extra must not set auth_header_jwks_uri; use the dedicated auth.header value
+  - it: allows unmapped auth.header.extra keys
+    set:
+      auth.mode: header
+      auth.header.jwksUri: http://idp.example.com/jwks.json
+      auth.header.extra: {auth_header_debug_jwt: true}
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_AUTH_MODE, value: header}

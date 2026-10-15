@@ -105,6 +105,15 @@ unlink("$dir/sso.php");
 
 [$rc, , $err] = run_in_child('render_sso();', ['WL_CONFIG_DIR' => $dir, 'WL_SSO_JSON' => '{"jwksUri":""}']);
 check($rc !== 0 && str_contains($err, 'bootstrap: auth.header.jwksUri is required when auth.mode=header'), 'render_sso requires jwksUri');
+foreach (['auth_header_jwks_uri', 'auth_header_create'] as $mappedKey) {
+    $bad = ['jwksUri' => 'http://idp.example.com/jwks.json', 'extra' => [$mappedKey => '']];
+    [$rc, , $err] = run_in_child('render_sso();', ['WL_CONFIG_DIR' => $dir, 'WL_SSO_JSON' => json_encode($bad)]);
+    check(
+        $rc !== 0 && str_contains($err, "bootstrap: auth.header.extra must not set $mappedKey; use the dedicated auth.header value")
+            && !file_exists("$dir/sso.php"),
+        "extra cannot override $mappedKey"
+    );
+}
 rmdir($dir);
 
 // api_keys_from_env: trimmed, non-empty, at most 255 chars, unique.

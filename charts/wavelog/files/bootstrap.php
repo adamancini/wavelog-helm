@@ -204,6 +204,13 @@ function render_sso(): void
     if (!is_array($extra)) {
         fail('auth.header.extra must be a map');
     }
+    // A mapped key in extra would override the dedicated value, e.g. an empty
+    // auth_header_jwks_uri disables signature verification upstream.
+    foreach (array_keys($extra) as $k) {
+        if (in_array((string) $k, WL_SSO_KEYS, true)) {
+            fail("auth.header.extra must not set $k; use the dedicated auth.header value");
+        }
+    }
     write_file($dir, 'sso.php', append_config($php, $extra, 'auth.header.extra'));
 }
 

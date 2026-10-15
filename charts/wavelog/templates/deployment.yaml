@@ -112,7 +112,7 @@ spec:
                 secretKeyRef: {name: {{ include "wavelog.admin.secretName" . }}, key: {{ .Values.install.admin.passwordKey }}}
             - {name: WL_EXTRA_CONFIG_JSON, value: {{ toJson .Values.config.extra | toJson }}}
             - {name: WL_AUTH_MODE, value: {{ default "local" .Values.auth.mode | toJson }}}
-            {{- if eq .Values.auth.mode "header" }}
+            {{- if eq (default "local" .Values.auth.mode) "header" }}
             - {name: WL_SSO_JSON, value: {{ omit .Values.auth.header "adminIdentity" | toJson | toJson }}}
             {{- with .Values.auth.header.adminIdentity }}
             {{- if and .issuer .subject }}
