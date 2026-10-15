@@ -1,0 +1,10 @@
+baseUrl: https://wavelog.example.com/
+install:
+  mode: declarative
+auth:
+  mode: header
+  header:
+    jwksUri: https://idp.example.com/realms/example/protocol/openid-connect/certs
+    adminIdentity:
+      issuer: https://idp.example.com/realms/example
+      subject: 00000000-0000-0000-0000-000000000001

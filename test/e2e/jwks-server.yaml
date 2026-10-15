@@ -1,0 +1,39 @@
+# Test-only JWKS endpoint for the sso scenario: nginx serving the ConfigMap
+# "jwks" (created by sso.sh from mint_jwt.py output) at http://jwks/jwks.json.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jwks
+  labels:
+    app.kubernetes.io/name: jwks
+spec:
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      ports:
+        - name: http
+          containerPort: 80
+      readinessProbe:
+        httpGet:
+          path: /jwks.json
+          port: http
+      volumeMounts:
+        - name: jwks
+          mountPath: /usr/share/nginx/html
+          readOnly: true
+  volumes:
+    - name: jwks
+      configMap:
+        name: jwks
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jwks
+spec:
+  selector:
+    app.kubernetes.io/name: jwks
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

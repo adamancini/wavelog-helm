@@ -26,6 +26,7 @@ jobs:
           - declarative
           - wizard
           - apikeys
+          - sso
     env:
       E2E_KUBE_CONTEXT: kind-wavelog-e2e
     steps:

@@ -175,3 +175,19 @@ app.kubernetes.io/component: mariadb
 {{- define "wavelog.db.passwordKey" -}}
 {{- if .Values.mariadb.enabled -}}{{- .Values.mariadb.auth.passwordKey -}}{{- else -}}{{- .Values.externalDatabase.passwordKey -}}{{- end -}}
 {{- end -}}
+
+{{/* Fail fast on invalid auth settings. */}}
+{{- define "wavelog.auth.validate" -}}
+{{- $mode := default "local" .Values.auth.mode -}}
+{{- if not (has $mode (list "local" "header")) -}}
+{{- fail "auth.mode must be local or header" -}}
+{{- end -}}
+{{- if eq $mode "header" -}}
+{{- $h := .Values.auth.header -}}
+{{- $_ := required "auth.header.jwksUri is required when auth.mode=header" $h.jwksUri -}}
+{{- $id := $h.adminIdentity | default dict -}}
+{{- if ne (empty $id.issuer) (empty $id.subject) -}}
+{{- fail "auth.header.adminIdentity needs both issuer and subject" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

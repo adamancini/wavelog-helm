@@ -1,0 +1,21 @@
+baseUrl: https://wavelog.example.com/
+install:
+  mode: declarative
+  admin:
+    username: admin
+    email: admin@example.com
+    callsign: N0CALL
+    locator: AA00aa
+auth:
+  mode: header
+  header:
+    # The jwks Service in the release namespace (jwks-server.yaml).
+    jwksUri: http://jwks/jwks.json
+    adminIdentity:
+      issuer: https://idp.example.test
+      subject: e2e-subject-1
+persistence:
+  size: 1Gi
+mariadb:
+  persistence:
+    size: 1Gi

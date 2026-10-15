@@ -7,6 +7,17 @@ const WL_DEFAULT_KEY = 'flossie1234555541';
 const WL_APP_DIR = '/var/www/html';
 const WL_TEMPLATE_DIR = WL_APP_DIR . '/install/config';
 const WL_INSTALL_DIR = WL_APP_DIR . '/install';
+const WL_SSO_SAMPLE = WL_APP_DIR . '/application/config/sso.sample.php';
+// auth.header value => upstream sso.php key.
+const WL_SSO_KEYS = [
+    'jwksUri' => 'auth_header_jwks_uri',
+    'headerName' => 'auth_header_accesstoken',
+    'createUsers' => 'auth_header_create',
+    'allowDirectLogin' => 'auth_header_allow_direct_login',
+    'hidePasswordField' => 'auth_header_hide_password_field',
+    'buttonText' => 'auth_header_text',
+    'logoutUrl' => 'auth_header_url_logout',
+];
 
 function fail(string $reason): void
 {
@@ -81,6 +92,19 @@ function write_file(string $dir, string $name, string $content): void
     }
 }
 
+// Append $config[key] = value lines; later assignments override the template's.
+function append_config(string $php, array $entries, string $source): string
+{
+    if (!$entries) {
+        return $php;
+    }
+    $php = rtrim($php) . "\n\n// Added by the Helm chart ($source)\n";
+    foreach ($entries as $k => $v) {
+        $php .= '$config[' . var_export((string) $k, true) . '] = ' . var_export($v, true) . ";\n";
+    }
+    return $php;
+}
+
 function render_config(): void
 {
     $dir = env('WL_CONFIG_DIR');
@@ -121,12 +145,7 @@ function render_config(): void
     if (!is_array($extra)) {
         fail('WL_EXTRA_CONFIG_JSON must be a JSON object');
     }
-    if ($extra) {
-        $config = rtrim($config) . "\n\n// Added by the Helm chart (config.extra)\n";
-        foreach ($extra as $k => $v) {
-            $config .= '$config[' . var_export((string) $k, true) . '] = ' . var_export($v, true) . ";\n";
-        }
-    }
+    $config = append_config($config, $extra, 'config.extra');
 
     // CodeIgniter's mysqli driver takes the port from 'port', not 'host:port'.
     $db = read_template('database.php');
@@ -144,6 +163,48 @@ function render_config(): void
 
     write_file($dir, 'config.php', $config);
     write_file($dir, 'database.php', $db);
+}
+
+// sso.php for header auth: upstream's sample with each auth.header value set
+// in place, then auth.header.extra appended verbatim by key.
+function render_sso(): void
+{
+    $dir = env('WL_CONFIG_DIR');
+    if ($dir === '') {
+        fail('WL_CONFIG_DIR is not set');
+    }
+    $sso = json_decode(env('WL_SSO_JSON', '{}') ?: '{}', true);
+    if (!is_array($sso)) {
+        fail('WL_SSO_JSON must be a JSON object');
+    }
+    if ((string) ($sso['jwksUri'] ?? '') === '') {
+        fail('auth.header.jwksUri is required when auth.mode=header');
+    }
+    $php = @file_get_contents(WL_SSO_SAMPLE);
+    if ($php === false) {
+        fail('cannot read ' . WL_SSO_SAMPLE);
+    }
+    foreach (WL_SSO_KEYS as $from => $key) {
+        if (!array_key_exists($from, $sso)) {
+            continue;
+        }
+        $line = '$config[' . var_export($key, true) . '] = ' . var_export($sso[$from], true) . ';';
+        $php = preg_replace_callback(
+            '/^\$config\[\'' . preg_quote($key, '/') . '\'\]\s*=[^\n]*;[ \t]*$/m',
+            fn() => $line,
+            $php,
+            -1,
+            $count
+        );
+        if ($count !== 1) {
+            fail("$key not found once in sso.sample.php");
+        }
+    }
+    $extra = $sso['extra'] ?? [];
+    if (!is_array($extra)) {
+        fail('auth.header.extra must be a map');
+    }
+    write_file($dir, 'sso.php', append_config($php, $extra, 'auth.header.extra'));
 }
 
 function db(): mysqli
@@ -278,6 +339,29 @@ function run_migrations(): void
     info("migrations at version $v");
 }
 
+// Key values for WL_API_KEYS_JSON entries 0..$count-1, from WL_API_KEY_<n>,
+// with surrounding whitespace (e.g. a trailing newline in a Secret) trimmed.
+function api_keys_from_env(int $count): array
+{
+    $keys = [];
+    $seen = [];
+    for ($n = 0; $n < $count; $n++) {
+        $key = trim(env('WL_API_KEY_' . $n));
+        if ($key === '') {
+            fail("apiKeys[$n]: key is empty");
+        }
+        if (strlen($key) > 255) {
+            fail("apiKeys[$n]: key is longer than 255 characters");
+        }
+        if (isset($seen[$key])) {
+            fail("apiKeys[$n]: same key as apiKeys[{$seen[$key]}]");
+        }
+        $seen[$key] = $n;
+        $keys[] = $key;
+    }
+    return $keys;
+}
+
 // Upsert API keys by key value. Never deletes: keys absent from values stay.
 // WL_API_KEYS_JSON is [{description, rights, user}]; the key for entry n is in
 // WL_API_KEY_<n>. An empty user means the install admin.
@@ -291,11 +375,10 @@ function seed_api_keys(mysqli $db): void
     $exists = $db->prepare('SELECT COUNT(*) FROM api WHERE `key` = ?');
     $update = $db->prepare("UPDATE api SET rights = ?, status = 'active', description = ?, user_id = ? WHERE `key` = ?");
     $insert = $db->prepare("INSERT INTO api (`key`, rights, status, description, user_id, created_by) VALUES (?, ?, 'active', ?, ?, ?)");
-    foreach (array_values($entries) as $n => $entry) {
-        $key = env('WL_API_KEY_' . $n);
-        if ($key === '') {
-            fail("apiKeys[$n]: key is empty");
-        }
+    $entries = array_values($entries);
+    $keys = api_keys_from_env(count($entries));
+    foreach ($entries as $n => $entry) {
+        $key = $keys[$n];
         $rights = (string) ($entry['rights'] ?? '');
         if ($rights !== 'r' && $rights !== 'rw') {
             fail("apiKeys[$n]: rights must be r or rw");
@@ -326,6 +409,38 @@ function seed_api_keys(mysqli $db): void
     info('api keys seeded: ' . count($entries));
 }
 
+// Link the install admin to an IdP identity so header login lands on it.
+// external_account is built exactly as Header_auth::login() builds it, and an
+// identity is matched the way User_model::get_by_external_account() matches it.
+function link_admin_identity(mysqli $db): void
+{
+    $iss = env('WL_ADMIN_ISS');
+    $sub = env('WL_ADMIN_SUB');
+    if ($iss === '' || $sub === '') {
+        return;
+    }
+    $user = env('WL_ADMIN_USERNAME');
+    $find = $db->prepare('SELECT user_id FROM users WHERE user_name = ?');
+    $find->bind_param('s', $user);
+    $find->execute();
+    $row = $find->get_result()->fetch_row();
+    if (!$row) {
+        fail("admin user $user not found");
+    }
+    $uid = (int) $row[0];
+    $taken = $db->prepare("SELECT COUNT(*) FROM users WHERE JSON_VALUE(external_account, '$.iss') = ? AND JSON_VALUE(external_account, '$.sub') = ? AND user_id <> ?");
+    $taken->bind_param('ssi', $iss, $sub, $uid);
+    $taken->execute();
+    if ((int) $taken->get_result()->fetch_row()[0] > 0) {
+        fail('SSO identity already linked to another user');
+    }
+    $account = json_encode(['iss' => $iss, 'sub' => $sub]);
+    $update = $db->prepare('UPDATE users SET external_account = ? WHERE user_name = ?');
+    $update->bind_param('ss', $account, $user);
+    $update->execute();
+    info("admin $user linked to SSO identity");
+}
+
 function main(): int
 {
     // Never print a stack trace: its arguments can include passwords.
@@ -334,6 +449,9 @@ function main(): int
     });
 
     render_config();
+    if (env('WL_AUTH_MODE', 'local') === 'header') {
+        render_sso();
+    }
     info('config rendered');
 
     $db = wait_for_db();
@@ -353,9 +471,11 @@ function main(): int
 
     run_migrations();
 
-    // Migrations may add api columns (created_by), so seed on a fresh connection.
+    // Migrations may add columns (api.created_by, users.external_account), so
+    // seed on a fresh connection.
     $db = db();
     seed_api_keys($db);
+    link_admin_identity($db);
     $db->close();
     return 0;
 }

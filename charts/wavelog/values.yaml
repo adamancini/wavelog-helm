@@ -62,8 +62,31 @@ config:
 apiKeys: []
 
 auth:
-  # local | header
+  # local: Wavelog's own login form. header: also accept a signed JWT access
+  # token forwarded in a request header by a trusted reverse proxy (requires
+  # install.mode=declarative, which renders sso.php).
   mode: local
+  header:
+    # JWKS endpoint used to verify token signatures. Required in header mode.
+    jwksUri: ""
+    # PHP $_SERVER name of the token header (X-Forwarded-Access-Token).
+    headerName: HTTP_X_FORWARDED_ACCESS_TOKEN
+    # Create a Wavelog user on first login of an unknown identity.
+    createUsers: false
+    # Keep the username/password form next to the SSO button.
+    allowDirectLogin: true
+    hidePasswordField: false
+    buttonText: Login with SSO
+    # Redirect after logout; empty returns to the Wavelog login page.
+    logoutUrl: ""
+    # Link the install admin to this IdP identity (token iss and sub claims)
+    # on every start. Set both or neither.
+    adminIdentity:
+      issuer: ""
+      subject: ""
+    # Extra sso.php $config[key] = value entries, written verbatim by key,
+    # e.g. auth_headers_claim_config.
+    extra: {}
 
 mariadb:
   # false uses externalDatabase instead of the bundled MariaDB.

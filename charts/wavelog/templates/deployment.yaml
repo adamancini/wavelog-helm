@@ -1,3 +1,4 @@
+{{- include "wavelog.auth.validate" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -111,6 +112,15 @@ spec:
                 secretKeyRef: {name: {{ include "wavelog.admin.secretName" . }}, key: {{ .Values.install.admin.passwordKey }}}
             - {name: WL_EXTRA_CONFIG_JSON, value: {{ toJson .Values.config.extra | toJson }}}
             - {name: WL_AUTH_MODE, value: {{ default "local" .Values.auth.mode | toJson }}}
+            {{- if eq .Values.auth.mode "header" }}
+            - {name: WL_SSO_JSON, value: {{ omit .Values.auth.header "adminIdentity" | toJson | toJson }}}
+            {{- with .Values.auth.header.adminIdentity }}
+            {{- if and .issuer .subject }}
+            - {name: WL_ADMIN_ISS, value: {{ .issuer | toString | toJson }}}
+            - {name: WL_ADMIN_SUB, value: {{ .subject | toString | toJson }}}
+            {{- end }}
+            {{- end }}
+            {{- end }}
             {{- $keys := list }}
             {{- range $i, $k := .Values.apiKeys }}
             {{- if not (has ($k.rights | default "") (list "r" "rw")) }}

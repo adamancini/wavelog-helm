@@ -1,0 +1,73 @@
+suite: header SSO
+templates:
+  - deployment.yaml
+set:
+  baseUrl: https://w.example.com
+tests:
+  - it: requires jwksUri in header mode
+    set: {auth.mode: header}
+    asserts:
+      - failedTemplate:
+          errorMessage: auth.header.jwksUri is required when auth.mode=header
+  - it: rejects an unknown auth.mode
+    set: {auth.mode: oidc}
+    asserts:
+      - failedTemplate:
+          errorMessage: auth.mode must be local or header
+  - it: passes the header settings to bootstrap without adminIdentity
+    set:
+      auth.mode: header
+      auth.header.jwksUri: http://idp.example.com/jwks.json
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_AUTH_MODE, value: header}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: WL_SSO_JSON
+            value: '{"allowDirectLogin":true,"buttonText":"Login with SSO","createUsers":false,"extra":{},"headerName":"HTTP_X_FORWARDED_ACCESS_TOKEN","hidePasswordField":false,"jwksUri":"http://idp.example.com/jwks.json","logoutUrl":""}'
+      - notContains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_ADMIN_ISS}
+          any: true
+  - it: passes the admin identity when set
+    set:
+      auth.mode: header
+      auth.header.jwksUri: http://idp.example.com/jwks.json
+      auth.header.adminIdentity: {issuer: "https://idp.example.com", subject: "abc-123"}
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_ADMIN_ISS, value: "https://idp.example.com"}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_ADMIN_SUB, value: "abc-123"}
+  - it: requires both issuer and subject for adminIdentity
+    set:
+      auth.mode: header
+      auth.header.jwksUri: http://idp.example.com/jwks.json
+      auth.header.adminIdentity: {issuer: "https://idp.example.com"}
+    asserts:
+      - failedTemplate:
+          errorMessage: auth.header.adminIdentity needs both issuer and subject
+  - it: sets no SSO env in local mode
+    set:
+      auth.header.jwksUri: http://idp.example.com/jwks.json
+      auth.header.adminIdentity: {issuer: "https://idp.example.com", subject: "abc-123"}
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_AUTH_MODE, value: local}
+      - notContains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_SSO_JSON}
+          any: true
+      - notContains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_ADMIN_ISS}
+          any: true
+      - notContains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_ADMIN_SUB}
+          any: true
