@@ -88,6 +88,27 @@ auth:
     # e.g. auth_headers_claim_config.
     extra: {}
 
+oauth2Proxy:
+  # Sidecar that performs the OIDC login and forwards the access token to
+  # Wavelog as X-Forwarded-Access-Token. Requires auth.mode=header. When on, the
+  # Service exposes only the proxy (4180); Apache's port 80 is not a Service port.
+  enabled: false
+  image:
+    repository: quay.io/oauth2-proxy/oauth2-proxy
+    tag: v7.12.0
+    pullPolicy: IfNotPresent
+  # OIDC issuer URL. Required when enabled.
+  issuerUrl: ""
+  # Existing Secret with keys client-id, client-secret and cookie-secret
+  # (16, 24 or 32 bytes). Required when enabled.
+  existingSecret: ""
+  # Regexes that bypass login so API clients can use their API key.
+  skipAuthRoutes:
+    - "^/index.php/api/"
+  # Extra command-line arguments, appended verbatim.
+  extraArgs: []
+  resources: {}
+
 mariadb:
   # false uses externalDatabase instead of the bundled MariaDB.
   enabled: true

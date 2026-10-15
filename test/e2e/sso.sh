@@ -15,6 +15,8 @@ SUB=e2e-subject-1
 EXPECTED_ACCOUNT='{"iss":"https:\/\/idp.example.test","sub":"e2e-subject-1"}'
 VENV="$E2E_DIR/.venv"
 KEYS="$E2E_TMP/keys"
+PROXY_ISSUER=http://jwks
+API_KEY=wlE2Esidecarkey01
 
 if [[ ! -x $VENV/bin/python ]]; then
   e2e_log "creating $VENV"
@@ -60,7 +62,12 @@ sso_login() {
 e2e_namespace "$SCENARIO"
 
 mint keys "$KEYS"
-k create configmap jwks --from-file=jwks.json="$KEYS/jwks.json" >/dev/null
+# Discovery for the oauth2-proxy phase; the issuer must match issuerUrl exactly.
+cat >"$KEYS/openid-configuration" <<EOF2
+{"issuer":"$PROXY_ISSUER","authorization_endpoint":"$PROXY_ISSUER/authorize","token_endpoint":"$PROXY_ISSUER/token","jwks_uri":"$PROXY_ISSUER/jwks.json","response_types_supported":["code"],"subject_types_supported":["public"],"id_token_signing_alg_values_supported":["RS256"]}
+EOF2
+k create configmap jwks --from-file=jwks.json="$KEYS/jwks.json" \
+  --from-file=openid-configuration="$KEYS/openid-configuration" >/dev/null
 k apply -f "$E2E_DIR/jwks-server.yaml" >/dev/null
 k wait --for=condition=Ready pod/jwks --timeout=5m >/dev/null
 
@@ -103,6 +110,30 @@ url=$(pod_url)
 location=$(sso_login "$url" "$(mint token "$KEYS/idp.pem" "$ISS" "$SUB")")
 [[ $location == */dashboard ]] || e2e_die "SSO login after restart redirected to '$location'"
 printf 'ok: SSO login after restart\n' >&2
+
+# oauth2-proxy sidecar: the Service reaches the proxy, never Apache.
+k create secret generic wl-apikey --from-literal=api-key="$API_KEY" >/dev/null
+k create secret generic wl-oauth2-proxy --from-literal=client-id=wavelog \
+  --from-literal=client-secret=e2e-client-secret \
+  --from-literal=cookie-secret=0123456789abcdef0123456789abcdef >/dev/null
+e2e_upgrade -f "$VALUES" -f "$E2E_DIR/values-sso-proxy.yaml"
+assert_eq "proxy" "$(k get svc "$E2E_FULLNAME" -o jsonpath='{.spec.ports[0].targetPort}')" "Service targets the proxy port"
+assert_eq 1 "$(k get svc "$E2E_FULLNAME" -o jsonpath='{.spec.ports[*].name}' | wc -w | tr -d ' ')" "Service has a single port"
+url=$(e2e_url)
+curl -s -o /dev/null -D "$E2E_TMP/headers" "$url/"
+status=$(head -n1 "$E2E_TMP/headers" | tr -d '\r')
+location=$(sed -n 's/^[Ll]ocation: *//p' "$E2E_TMP/headers" | tr -d '\r')
+[[ $status == *" 302"* ]] || e2e_die "GET / through the proxy returned '$status', not a 302"
+[[ $location == "$PROXY_ISSUER/authorize"* ]] || e2e_die "GET / redirected to '$location', not the issuer"
+printf 'ok: GET / redirects to the issuer\n' >&2
+body=$(printf '{"key":"%s","station_profile_id":"1","type":"adif","string":"<call:5>K3GHI<band:3>20m<mode:3>FT8<qso_date:8>20260101<time_on:6>120000<eor>"}' "$API_KEY")
+code=$(curl -s -o "$E2E_TMP/qso.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+  -d "$body" "$url/index.php/api/qso")
+[[ $code == 200 || $code == 201 ]] || e2e_die "POST /api/qso through the proxy returned $code: $(cat "$E2E_TMP/qso.json")"
+grep -q '"status":"created"\|"status":"ok"' "$E2E_TMP/qso.json" \
+  || e2e_die "POST /api/qso through the proxy not ok: $(cat "$E2E_TMP/qso.json")"
+printf 'ok: API QSO accepted through the proxy (%s)\n' "$code" >&2
+assert_eq 1 "$(e2e_sql "SELECT COUNT(*) FROM TABLE_HRD_CONTACTS_V01 WHERE COL_CALL='K3GHI'")" "QSO stored via the proxy"
 
 # Another user holding the identity: bootstrap refuses to steal it.
 # Non-strict mode fills the remaining NOT NULL columns with implicit defaults.

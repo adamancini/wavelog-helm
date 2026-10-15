@@ -1,0 +1,11 @@
+baseUrl: https://wavelog.example.com/
+install:
+  mode: declarative
+auth:
+  mode: header
+  header:
+    jwksUri: https://idp.example.com/realms/example/protocol/openid-connect/certs
+oauth2Proxy:
+  enabled: true
+  issuerUrl: https://idp.example.com/realms/example
+  existingSecret: wavelog-oauth2-proxy

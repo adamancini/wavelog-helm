@@ -1,0 +1,98 @@
+suite: oauth2-proxy sidecar
+templates:
+  - deployment.yaml
+  - service.yaml
+set:
+  baseUrl: https://w.example.com
+  auth.mode: header
+  auth.header.jwksUri: http://idp.example.com/jwks.json
+  oauth2Proxy.enabled: true
+  oauth2Proxy.issuerUrl: https://idp.example.com
+  oauth2Proxy.existingSecret: proxy-creds
+tests:
+  - it: adds the oauth2-proxy container with the proxy arguments
+    template: deployment.yaml
+    asserts:
+      - equal: {path: "spec.template.spec.containers[1].name", value: oauth2-proxy}
+      - equal: {path: "spec.template.spec.containers[1].image", value: "quay.io/oauth2-proxy/oauth2-proxy:v7.12.0"}
+      - equal: {path: "spec.template.spec.containers[1].ports[0].name", value: proxy}
+      - equal: {path: "spec.template.spec.containers[1].ports[0].containerPort", value: 4180}
+      - equal:
+          path: spec.template.spec.containers[1].args
+          value:
+            - --http-address=0.0.0.0:4180
+            - --upstream=http://127.0.0.1:80/
+            - --provider=oidc
+            - --oidc-issuer-url=https://idp.example.com
+            - --pass-access-token=true
+            - --set-xauthrequest=true
+            - --reverse-proxy=true
+            - --email-domain=*
+            - --skip-auth-route=^/index.php/api/
+  - it: appends extraArgs and honours skipAuthRoutes
+    template: deployment.yaml
+    set:
+      oauth2Proxy.skipAuthRoutes: ["^/a/", "^/b/"]
+      oauth2Proxy.extraArgs: ["--scope=openid email"]
+    asserts:
+      - contains: {path: "spec.template.spec.containers[1].args", content: "--skip-auth-route=^/a/"}
+      - contains: {path: "spec.template.spec.containers[1].args", content: "--skip-auth-route=^/b/"}
+      - contains: {path: "spec.template.spec.containers[1].args", content: "--scope=openid email"}
+      - notContains: {path: "spec.template.spec.containers[1].args", content: "--skip-auth-route=^/index.php/api/"}
+  - it: reads client and cookie secrets from the existing Secret
+    template: deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: OAUTH2_PROXY_CLIENT_ID
+            valueFrom: {secretKeyRef: {name: proxy-creds, key: client-id}}
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: OAUTH2_PROXY_CLIENT_SECRET
+            valueFrom: {secretKeyRef: {name: proxy-creds, key: client-secret}}
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: OAUTH2_PROXY_COOKIE_SECRET
+            valueFrom: {secretKeyRef: {name: proxy-creds, key: cookie-secret}}
+  - it: runs the sidecar locked down and takes resources from values
+    template: deployment.yaml
+    set:
+      oauth2Proxy.resources: {limits: {memory: 64Mi}}
+    asserts:
+      - equal: {path: "spec.template.spec.containers[1].securityContext.readOnlyRootFilesystem", value: true}
+      - equal: {path: "spec.template.spec.containers[1].securityContext.runAsNonRoot", value: true}
+      - equal: {path: "spec.template.spec.containers[1].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.containers[1].resources.limits.memory", value: 64Mi}
+  - it: points the Service at the proxy and never at port 80
+    template: service.yaml
+    asserts:
+      - lengthEqual: {path: spec.ports, count: 1}
+      - equal: {path: "spec.ports[0].targetPort", value: proxy}
+  - it: has no sidecar and targets http when disabled
+    set: {oauth2Proxy.enabled: false}
+    asserts:
+      - lengthEqual: {path: spec.template.spec.containers, count: 1}
+        template: deployment.yaml
+      - equal: {path: "spec.ports[0].targetPort", value: http}
+        template: service.yaml
+  - it: requires auth.mode=header
+    template: service.yaml
+    set: {auth.mode: local}
+    asserts:
+      - failedTemplate:
+          errorMessage: oauth2Proxy requires auth.mode=header
+  - it: requires issuerUrl
+    template: service.yaml
+    set: {oauth2Proxy.issuerUrl: ""}
+    asserts:
+      - failedTemplate:
+          errorMessage: oauth2Proxy.issuerUrl is required when oauth2Proxy.enabled
+  - it: requires existingSecret
+    template: service.yaml
+    set: {oauth2Proxy.existingSecret: ""}
+    asserts:
+      - failedTemplate:
+          errorMessage: oauth2Proxy.existingSecret is required when oauth2Proxy.enabled

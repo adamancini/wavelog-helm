@@ -1,0 +1,15 @@
+# Layered over values-sso.yaml for the oauth2-proxy phase of sso.sh. The
+# discovery document is served by the jwks stub, so the issuer is its Service.
+apiKeys:
+  - description: e2e logger
+    rights: rw
+    user: admin
+    existingSecret: wl-apikey
+    secretKey: api-key
+oauth2Proxy:
+  enabled: true
+  issuerUrl: http://jwks
+  existingSecret: wl-oauth2-proxy
+  extraArgs:
+    # Redirect unauthenticated requests instead of rendering the sign-in page.
+    - --skip-provider-button=true

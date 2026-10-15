@@ -1,5 +1,7 @@
-# Test-only JWKS endpoint for the sso scenario: nginx serving the ConfigMap
-# "jwks" (created by sso.sh from mint_jwt.py output) at http://jwks/jwks.json.
+# Test-only identity provider stub for the sso scenario: nginx serving the
+# ConfigMap "jwks" (created by sso.sh from mint_jwt.py output) at
+# http://jwks/jwks.json, plus an OIDC discovery document at
+# http://jwks/.well-known/openid-configuration for oauth2-proxy.
 apiVersion: v1
 kind: Pod
 metadata:
@@ -25,6 +27,9 @@ spec:
     - name: jwks
       configMap:
         name: jwks
+        items:
+          - {key: jwks.json, path: jwks.json}
+          - {key: openid-configuration, path: .well-known/openid-configuration}
 ---
 apiVersion: v1
 kind: Service

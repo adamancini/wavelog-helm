@@ -1,3 +1,4 @@
+{{- include "wavelog.auth.validate" . }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -9,7 +10,7 @@ spec:
   ports:
     - name: http
       port: {{ .Values.service.port }}
-      targetPort: http
+      targetPort: {{ ternary "proxy" "http" .Values.oauth2Proxy.enabled }}
       protocol: TCP
   selector:
     {{- include "wavelog.appSelectorLabels" . | nindent 4 }}

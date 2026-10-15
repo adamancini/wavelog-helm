@@ -182,6 +182,13 @@ app.kubernetes.io/component: mariadb
 {{- if not (has $mode (list "local" "header")) -}}
 {{- fail "auth.mode must be local or header" -}}
 {{- end -}}
+{{- if .Values.oauth2Proxy.enabled -}}
+{{- if ne $mode "header" -}}
+{{- fail "oauth2Proxy requires auth.mode=header" -}}
+{{- end -}}
+{{- $_ := required "oauth2Proxy.issuerUrl is required when oauth2Proxy.enabled" .Values.oauth2Proxy.issuerUrl -}}
+{{- $_ := required "oauth2Proxy.existingSecret is required when oauth2Proxy.enabled" .Values.oauth2Proxy.existingSecret -}}
+{{- end -}}
 {{- if eq $mode "header" -}}
 {{- if ne .Values.install.mode "declarative" -}}
 {{- fail "auth.mode=header requires install.mode=declarative" -}}
