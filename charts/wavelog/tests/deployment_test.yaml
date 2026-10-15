@@ -107,3 +107,11 @@ tests:
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: chown 999:33
+  - it: rejects an unknown install.mode
+    set: {install.mode: bogus}
+    asserts:
+      - failedTemplate: {errorMessage: install.mode must be declarative or wizard}
+  - it: rejects wizard mode without persistence
+    set: {install.mode: wizard, persistence.enabled: false}
+    asserts:
+      - failedTemplate: {errorMessage: "install.mode=wizard requires persistence.enabled=true (set persistence.existingClaim to use your own volume); the wizard config would otherwise be lost on every restart"}

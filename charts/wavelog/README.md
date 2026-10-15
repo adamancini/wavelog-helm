@@ -24,7 +24,9 @@ Resource names below use `<fullname>`. It equals the release name when that alre
 `wavelog-backup`), otherwise `<release>-wavelog`. `fullnameOverride` replaces it. Substitute
 your value; `<release>` is the Helm release name.
 
-Avoid `helm install --wait` when `backup.enabled=true` (see [Backups](#backups-and-restore)).
+Avoid `helm install --wait` when `backup.enabled=true` and the backup storage class uses
+`WaitForFirstConsumer` binding (see [Backups](#backups-and-restore)). `Immediate` classes and
+`backup.persistence.existingClaim` are fine.
 
 ## Examples
 
@@ -56,6 +58,9 @@ through a `lookup` against the cluster. That does not work with `helm template`,
 produce new values. Before using such a renderer, create the Secrets yourself and reference
 them with `config.existingSecret` (key `encryption-key`), `install.admin.existingSecret` and
 `mariadb.auth.existingSecret`. An `existingSecret` always wins over a generated one.
+
+The admin password from the Secret is used only at first install. Change it later in the
+Wavelog UI; rotating the Secret afterwards does nothing.
 
 If you rotate the app Secret outside Helm (encryption key or admin password), run
 `kubectl rollout restart deployment/<fullname>` so the pod picks it up. Changing the
@@ -123,6 +128,9 @@ curl -sS https://wavelog.example.com/index.php/api/qso \
        "string":"<call:5>K1ABC<band:3>20m<mode:3>FT8<qso_date:8>20260101<time_on:6>120000<eor>"}'
 ```
 
+Rotating an API key's Secret value adds the new key but leaves the old key active, because
+keys are never pruned. Delete the old key in the Wavelog UI.
+
 ### SSO with a generic OIDC identity provider
 
 Wavelog accepts a signed JWT forwarded in a request header by a trusted reverse proxy. The
@@ -168,6 +176,10 @@ Notes:
 - With the sidecar enabled the Service exposes only the proxy (port 4180); Apache's port 80 is
   never a Service port. `oauth2Proxy.skipAuthRoutes` lets API clients reach `/index.php/api/`
   with their API key.
+- Only `/index.php/api/` is skipped by default. Forwarders that use the rewrite-style `/api/...`
+  path must switch to `/index.php/api/...` or you must add a `skipAuthRoutes` entry.
+- Upstream Wavelog does not check the JWT `aud` or an expected `iss`, so any token signed by the
+  IdP's keys is accepted. Use a dedicated IdP or client policy if the IdP is shared.
 - Use an `https` `jwksUri`.
 - Removing `adminIdentity` later does not unlink the admin account.
 - On each login Wavelog overwrites the user's name, email and callsign with the claims present
@@ -220,6 +232,27 @@ The data volume (`persistence`) and the backup volume (`backup.persistence`) car
 `helm.sh/resource-policy: keep`, so `helm uninstall` leaves them in place. Set
 `persistence.keep` or `backup.persistence.keep` to `false` to let Helm delete them. Remove
 kept claims by hand with `kubectl delete pvc`.
+
+The chart-generated Secrets (`<fullname>-app`, and `<fullname>-mariadb` when
+`mariadb.persistence.enabled`) carry the same annotation, because the encryption key, admin
+password hash and database credentials pair with the kept data. They survive `helm uninstall`
+alongside the PVCs; delete the Secrets together with the PVCs for a clean reinstall. A reinstall
+with the same release name reuses them through `lookup`.
+
+## Upgrading
+
+Database migrations run automatically when the pod starts. Before bumping `image.tag`, take a
+backup: with `backup.enabled=true`, create a Job from the CronJob
+(`kubectl create job --from=cronjob/<fullname>-backup pre-upgrade`).
+
+If the bootstrap init container reports "partial install detected", an earlier install was
+interrupted after creating only part of the schema. Either restore a backup, or drop the
+database schema and let the init container install again.
+
+`mariadb.image.tag` is a floating minor tag (`11.8`). Pin a patch version if you want
+reproducible rollouts. A MariaDB major upgrade needs `MARIADB_AUTO_UPGRADE` or a manual
+`mariadb-upgrade`; the chart has no extra-env value for the MariaDB container, so run the manual
+step or use an external database.
 
 ## Backups and restore
 
@@ -356,7 +389,6 @@ With `install.mode=wizard`:
 | `oauth2Proxy.image.pullPolicy` | `IfNotPresent` |  |
 | `oauth2Proxy.issuerUrl` | `""` | OIDC issuer URL. Required when enabled. |
 | `oauth2Proxy.existingSecret` | `""` | Existing Secret with keys client-id, client-secret and cookie-secret (16, 24 or 32 bytes). Required when enabled. |
-| `oauth2Proxy.skipAuthRoutes` | `["^/index.php/api/"]` | Regexes that bypass login so API clients can use their API key. |
 | `oauth2Proxy.skipAuthRoutes` | `["^/index.php/api/"]` | Regexes that bypass login so API clients can use their API key. |
 | `oauth2Proxy.extraArgs` | `[]` | Extra command-line arguments, appended verbatim. |
 | `oauth2Proxy.resources` | `{}` |  |

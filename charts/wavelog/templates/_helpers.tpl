@@ -178,6 +178,12 @@ app.kubernetes.io/component: mariadb
 
 {{/* Fail fast on invalid auth settings. */}}
 {{- define "wavelog.auth.validate" -}}
+{{- if not (has .Values.install.mode (list "declarative" "wizard")) -}}
+{{- fail "install.mode must be declarative or wizard" -}}
+{{- end -}}
+{{- if and (eq .Values.install.mode "wizard") (not .Values.persistence.enabled) -}}
+{{- fail "install.mode=wizard requires persistence.enabled=true (set persistence.existingClaim to use your own volume); the wizard config would otherwise be lost on every restart" -}}
+{{- end -}}
 {{- $mode := default "local" .Values.auth.mode -}}
 {{- if not (has $mode (list "local" "header")) -}}
 {{- fail "auth.mode must be local or header" -}}
