@@ -72,7 +72,7 @@ tests:
             valueFrom: {secretKeyRef: {name: dbs, key: mariadb-password}}
         template: mariadb-statefulset.yaml
   - it: renders nothing when using an external database
-    set: {mariadb.enabled: false, externalDatabase.host: db.example.com}
+    set: {mariadb.enabled: false, externalDatabase.host: db.example.com, externalDatabase.existingSecret: wavelog-db}
     asserts:
       - hasDocuments: {count: 0}
         template: mariadb-statefulset.yaml
@@ -85,8 +85,34 @@ tests:
     set: {mariadb.enabled: false}
     asserts:
       - failedTemplate: {errorMessage: "externalDatabase.host is required when mariadb.enabled=false"}
-  - it: validates cleanly with a host
+  - it: validates cleanly with a host and secret
+    template: validate.yaml
+    set: {mariadb.enabled: false, externalDatabase.host: db.example.com, externalDatabase.existingSecret: wavelog-db}
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: honours custom key names in the generated Secret and StatefulSet
+    set: {mariadb.auth.passwordKey: pw, mariadb.auth.rootPasswordKey: rootpw}
+    asserts:
+      - exists: {path: data.pw}
+        template: mariadb-secret.yaml
+      - exists: {path: data.rootpw}
+        template: mariadb-secret.yaml
+      - notExists: {path: "data.mariadb-password"}
+        template: mariadb-secret.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MARIADB_PASSWORD
+            valueFrom: {secretKeyRef: {name: RELEASE-NAME-wavelog-mariadb, key: pw}}
+        template: mariadb-statefulset.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MARIADB_ROOT_PASSWORD
+            valueFrom: {secretKeyRef: {name: RELEASE-NAME-wavelog-mariadb, key: rootpw}}
+        template: mariadb-statefulset.yaml
+  - it: fails when external database has no existingSecret
     template: validate.yaml
     set: {mariadb.enabled: false, externalDatabase.host: db.example.com}
     asserts:
-      - hasDocuments: {count: 0}
+      - failedTemplate: {errorMessage: "externalDatabase.existingSecret is required when mariadb.enabled=false"}

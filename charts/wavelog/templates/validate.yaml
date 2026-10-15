@@ -1,2 +1,5 @@
 {{- /* Fail fast on invalid database settings; renders no manifest. */ -}}
 {{- $_ := include "wavelog.db.host" . -}}
+{{- if not .Values.mariadb.enabled -}}
+{{- $_ := required "externalDatabase.existingSecret is required when mariadb.enabled=false" .Values.externalDatabase.existingSecret -}}
+{{- end -}}
