@@ -252,7 +252,14 @@ function run_migrations(): void
     $env = getenv();
     $env['CI_ENV'] = 'docker';
     $proc = proc_open(
-        ['php', WL_APP_DIR . '/index.php', 'migrate'],
+        [
+            'php',
+            // CI_ENV must reach getenv()/$_SERVER whatever php.ini says.
+            '-d', 'variables_order=EGPCS',
+            '-d', 'memory_limit=' . ini_get('memory_limit'),
+            '-d', 'max_execution_time=' . ini_get('max_execution_time'),
+            WL_APP_DIR . '/index.php', 'migrate',
+        ],
         [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]],
         $pipes,
         WL_APP_DIR,
@@ -269,6 +276,54 @@ function run_migrations(): void
     }
     $v = preg_match('/"version"\s*:\s*"?(\d+)/', $out, $m) ? $m[1] : '?';
     info("migrations at version $v");
+}
+
+// Upsert API keys by key value. Never deletes: keys absent from values stay.
+// WL_API_KEYS_JSON is [{description, rights, user}]; the key for entry n is in
+// WL_API_KEY_<n>. An empty user means the install admin.
+function seed_api_keys(mysqli $db): void
+{
+    $entries = json_decode(env('WL_API_KEYS_JSON', '[]') ?: '[]', true);
+    if (!is_array($entries)) {
+        fail('WL_API_KEYS_JSON must be a JSON array');
+    }
+    $find = $db->prepare('SELECT user_id FROM users WHERE user_name = ?');
+    $exists = $db->prepare('SELECT COUNT(*) FROM api WHERE `key` = ?');
+    $update = $db->prepare("UPDATE api SET rights = ?, status = 'active', description = ?, user_id = ? WHERE `key` = ?");
+    $insert = $db->prepare("INSERT INTO api (`key`, rights, status, description, user_id, created_by) VALUES (?, ?, 'active', ?, ?, ?)");
+    foreach (array_values($entries) as $n => $entry) {
+        $key = env('WL_API_KEY_' . $n);
+        if ($key === '') {
+            fail("apiKeys[$n]: key is empty");
+        }
+        $rights = (string) ($entry['rights'] ?? '');
+        if ($rights !== 'r' && $rights !== 'rw') {
+            fail("apiKeys[$n]: rights must be r or rw");
+        }
+        $user = (string) ($entry['user'] ?? '');
+        if ($user === '') {
+            $user = env('WL_ADMIN_USERNAME');
+        }
+        $find->bind_param('s', $user);
+        $find->execute();
+        $row = $find->get_result()->fetch_row();
+        if (!$row) {
+            fail("apiKeys user $user not found");
+        }
+        $uid = (int) $row[0];
+        $desc = (string) ($entry['description'] ?? '');
+
+        $exists->bind_param('s', $key);
+        $exists->execute();
+        if ((int) $exists->get_result()->fetch_row()[0] > 0) {
+            $update->bind_param('ssis', $rights, $desc, $uid, $key);
+            $update->execute();
+        } else {
+            $insert->bind_param('sssii', $key, $rights, $desc, $uid, $uid);
+            $insert->execute();
+        }
+    }
+    info('api keys seeded: ' . count($entries));
 }
 
 function main(): int
@@ -297,6 +352,11 @@ function main(): int
     $db->close();
 
     run_migrations();
+
+    // Migrations may add api columns (created_by), so seed on a fresh connection.
+    $db = db();
+    seed_api_keys($db);
+    $db->close();
     return 0;
 }
 

@@ -10,7 +10,13 @@ tests:
     asserts:
       - equal: {path: "spec.template.spec.initContainers[0].name", value: volume-permissions}
       - equal: {path: "spec.template.spec.initContainers[1].name", value: bootstrap}
-      - equal: {path: "spec.template.spec.initContainers[1].command", value: ["php", "/bootstrap/bootstrap.php"]}
+      - equal: {path: "spec.template.spec.initContainers[1].command", value: ["php", "-d", "memory_limit=256M", "-d", "max_execution_time=600", "/bootstrap/bootstrap.php"]}
+  - it: passes php.memoryLimit and php.maxExecutionTime to the bootstrap command
+    template: deployment.yaml
+    set: {php.memoryLimit: 512M, php.maxExecutionTime: 120}
+    asserts:
+      - equal: {path: "spec.template.spec.initContainers[1].command[2]", value: "memory_limit=512M"}
+      - equal: {path: "spec.template.spec.initContainers[1].command[4]", value: "max_execution_time=120"}
       - equal: {path: "spec.template.spec.initContainers[1].securityContext.runAsUser", value: 999}
       - equal: {path: "spec.template.spec.initContainers[1].securityContext.runAsGroup", value: 33}
   - it: mounts the generated config read-only in the main container

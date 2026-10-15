@@ -53,6 +53,14 @@ config:
   # Extra $config[key] = value entries; any scalar, list or map.
   extra: {}
 
+# Declarative API keys (install.mode=declarative). Upserted by key value on
+# every start; keys not listed here are never deleted. Each entry:
+#   description: free text
+#   rights: r | rw
+#   user: Wavelog user name (default: the install admin)
+#   existingSecret / secretKey: Secret holding the key (secretKey defaults to api-key)
+apiKeys: []
+
 auth:
   # local | header
   mode: local

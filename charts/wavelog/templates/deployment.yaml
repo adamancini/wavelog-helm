@@ -63,7 +63,13 @@ spec:
         - name: bootstrap
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["php", "/bootstrap/bootstrap.php"]
+          command:
+            - php
+            - -d
+            - memory_limit={{ .Values.php.memoryLimit }}
+            - -d
+            - max_execution_time={{ .Values.php.maxExecutionTime }}
+            - /bootstrap/bootstrap.php
           securityContext:
             runAsUser: 999
             runAsGroup: 33
@@ -105,6 +111,18 @@ spec:
                 secretKeyRef: {name: {{ include "wavelog.admin.secretName" . }}, key: {{ .Values.install.admin.passwordKey }}}
             - {name: WL_EXTRA_CONFIG_JSON, value: {{ toJson .Values.config.extra | toJson }}}
             - {name: WL_AUTH_MODE, value: {{ default "local" .Values.auth.mode | toJson }}}
+            {{- $keys := list }}
+            {{- range $i, $k := .Values.apiKeys }}
+            {{- if not (has ($k.rights | default "") (list "r" "rw")) }}
+            {{- fail "apiKeys[].rights must be r or rw" }}
+            {{- end }}
+            {{- $_ := required (printf "apiKeys[%d].existingSecret is required" $i) $k.existingSecret }}
+            {{- $keys = append $keys (dict "description" ($k.description | default "") "rights" $k.rights "user" ($k.user | default "")) }}
+            - name: {{ printf "WL_API_KEY_%d" $i }}
+              valueFrom:
+                secretKeyRef: {name: {{ $k.existingSecret | toJson }}, key: {{ $k.secretKey | default "api-key" | toJson }}}
+            {{- end }}
+            - {name: WL_API_KEYS_JSON, value: {{ toJson $keys | toJson }}}
           volumeMounts:
             {{- include "wavelog.configMount" . | nindent 12 }}
             - {name: bootstrap, mountPath: /bootstrap, readOnly: true}

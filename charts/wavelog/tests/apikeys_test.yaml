@@ -1,0 +1,48 @@
+suite: declarative api keys
+templates:
+  - deployment.yaml
+set:
+  baseUrl: https://w.example.com
+tests:
+  - it: renders one secretKeyRef env per key
+    set:
+      apiKeys:
+        - {description: logger, rights: rw, user: admin, existingSecret: k0}
+        - {description: viewer, rights: r, existingSecret: k1, secretKey: token}
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_API_KEY_0, valueFrom: {secretKeyRef: {name: k0, key: api-key}}}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_API_KEY_1, valueFrom: {secretKeyRef: {name: k1, key: token}}}
+  - it: describes the keys in WL_API_KEYS_JSON without the key values
+    set:
+      apiKeys:
+        - {description: logger, rights: rw, user: admin, existingSecret: k0}
+        - {description: viewer, rights: r, existingSecret: k1}
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: WL_API_KEYS_JSON
+            value: '[{"description":"logger","rights":"rw","user":"admin"},{"description":"viewer","rights":"r","user":""}]'
+  - it: renders an empty list with no keys
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_API_KEYS_JSON, value: "[]"}
+  - it: rejects invalid rights
+    set:
+      apiKeys:
+        - {description: bad, rights: x, existingSecret: k0}
+    asserts:
+      - failedTemplate:
+          errorMessage: "apiKeys[].rights must be r or rw"
+  - it: requires a Secret per key
+    set:
+      apiKeys:
+        - {description: bad, rights: r}
+    asserts:
+      - failedTemplate:
+          errorPattern: "apiKeys\\[0\\].existingSecret is required"
