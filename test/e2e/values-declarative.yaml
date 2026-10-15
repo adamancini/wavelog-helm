@@ -1,0 +1,14 @@
+baseUrl: https://wavelog.example.com/
+install:
+  mode: declarative
+  admin:
+    username: admin
+    callsign: N0CALL
+    locator: AA00aa
+    existingSecret: wl-admin
+    passwordKey: admin-password
+persistence:
+  size: 1Gi
+mariadb:
+  persistence:
+    size: 1Gi

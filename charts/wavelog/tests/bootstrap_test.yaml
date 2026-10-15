@@ -100,3 +100,20 @@ tests:
           content:
             name: WL_ADMIN_PASSWORD
             valueFrom: {secretKeyRef: {name: adm, key: pw}}
+  - it: rolls the pod when the bootstrap script changes
+    template: deployment.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/bootstrap"]
+          pattern: "^[0-9a-f]{64}$"
+  - it: keeps podAnnotations alongside the checksum
+    template: deployment.yaml
+    set: {podAnnotations: {example.com/team: radio}}
+    asserts:
+      - equal: {path: 'spec.template.metadata.annotations["example.com/team"]', value: radio}
+      - exists: {path: 'spec.template.metadata.annotations["checksum/bootstrap"]'}
+  - it: has no bootstrap checksum in wizard mode
+    template: deployment.yaml
+    set: {install.mode: wizard}
+    asserts:
+      - notExists: {path: spec.template.metadata.annotations}

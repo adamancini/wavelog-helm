@@ -15,7 +15,18 @@ spec:
     metadata:
       labels:
         {{- include "wavelog.appSelectorLabels" . | nindent 8 }}
-      {{- with .Values.podAnnotations }}
+      {{- /*
+      A changed bootstrap script rolls the pod. The app Secret is not hashed: its
+      values are pinned by lookup, any change to which keys it holds also changes
+      this pod's secretKeyRefs, and hashing a re-render would see a fresh random
+      value on first install and roll the pod on the first upgrade.
+      */}}
+      {{- $annotations := dict }}
+      {{- if eq .Values.install.mode "declarative" }}
+      {{- $_ := set $annotations "checksum/bootstrap" (.Files.Get "files/bootstrap.php" | sha256sum) }}
+      {{- end }}
+      {{- $annotations = merge $annotations (.Values.podAnnotations | default dict) }}
+      {{- with $annotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

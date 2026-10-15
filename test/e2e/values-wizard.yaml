@@ -1,0 +1,7 @@
+install:
+  mode: wizard
+persistence:
+  size: 1Gi
+mariadb:
+  persistence:
+    size: 1Gi

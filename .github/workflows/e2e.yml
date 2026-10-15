@@ -1,0 +1,63 @@
+name: End-to-end
+
+on:
+  pull_request:
+    paths:
+      - 'charts/**'
+      - 'test/**'
+      - '.github/workflows/e2e.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/**'
+      - 'test/**'
+      - '.github/workflows/e2e.yml'
+
+jobs:
+  e2e:
+    name: e2e (${{ matrix.scenario }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - declarative
+          - wizard
+    env:
+      E2E_KUBE_CONTEXT: kind-wavelog-e2e
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: v4.2.4
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: wavelog-e2e
+
+      - name: Run scenario
+        run: bash test/e2e/${{ matrix.scenario }}.sh
+
+      - name: Dump cluster state
+        if: failure()
+        run: |
+          for ns in $(kubectl --context "$E2E_KUBE_CONTEXT" get ns -o name | sed -n 's|^namespace/\(wl-e2e-.*\)|\1|p'); do
+            echo "::group::$ns resources and events"
+            kubectl --context "$E2E_KUBE_CONTEXT" -n "$ns" get all,events -o wide || true
+            echo "::endgroup::"
+            for pod in $(kubectl --context "$E2E_KUBE_CONTEXT" -n "$ns" get pods -o name); do
+              for c in $(kubectl --context "$E2E_KUBE_CONTEXT" -n "$ns" get "$pod" \
+                  -o jsonpath='{.spec.initContainers[*].name} {.spec.containers[*].name}'); do
+                echo "::group::$ns $pod $c"
+                kubectl --context "$E2E_KUBE_CONTEXT" -n "$ns" logs "$pod" -c "$c" --tail=500 || true
+                kubectl --context "$E2E_KUBE_CONTEXT" -n "$ns" logs "$pod" -c "$c" --previous --tail=500 2>/dev/null || true
+                echo "::endgroup::"
+              done
+            done
+          done
