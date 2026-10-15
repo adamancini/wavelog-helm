@@ -24,6 +24,35 @@ install:
   # declarative | wizard
   mode: declarative
 
+mariadb:
+  # false uses externalDatabase instead of the bundled MariaDB.
+  enabled: true
+  image:
+    repository: docker.io/library/mariadb
+    tag: "11.8"
+    pullPolicy: IfNotPresent
+  auth:
+    database: wavelog
+    username: wavelog
+    # Existing Secret holding passwordKey and rootPasswordKey; skips generation.
+    existingSecret: ""
+    passwordKey: mariadb-password
+    rootPasswordKey: mariadb-root-password
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 8Gi
+    existingClaim: ""
+  resources: {}
+
+externalDatabase:
+  host: ""
+  port: 3306
+  database: wavelog
+  username: wavelog
+  existingSecret: ""
+  passwordKey: mariadb-password
+
 persistence:
   enabled: true
   storageClass: ""

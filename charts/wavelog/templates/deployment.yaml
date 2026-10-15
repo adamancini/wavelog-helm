@@ -10,11 +10,11 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "wavelog.selectorLabels" . | nindent 6 }}
+      {{- include "wavelog.appSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "wavelog.selectorLabels" . | nindent 8 }}
+        {{- include "wavelog.appSelectorLabels" . | nindent 8 }}
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}

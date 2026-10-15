@@ -1,0 +1,2 @@
+{{- /* Fail fast on invalid database settings; renders no manifest. */ -}}
+{{- $_ := include "wavelog.db.host" . -}}

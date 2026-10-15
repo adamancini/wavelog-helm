@@ -1,0 +1,92 @@
+suite: mariadb
+templates:
+  - mariadb-statefulset.yaml
+  - mariadb-service.yaml
+  - mariadb-secret.yaml
+  - validate.yaml
+tests:
+  - it: runs the pinned official image as a single ordered replica
+    template: mariadb-statefulset.yaml
+    asserts:
+      - isKind: {of: StatefulSet}
+      - equal: {path: "spec.template.spec.containers[0].image", value: "docker.io/library/mariadb:11.8"}
+      - equal: {path: spec.replicas, value: 1}
+      - equal: {path: spec.podManagementPolicy, value: OrderedReady}
+      - equal: {path: "spec.template.spec.containers[0].volumeMounts[0].mountPath", value: /var/lib/mysql}
+  - it: labels pods with the mariadb component
+    template: mariadb-statefulset.yaml
+    asserts:
+      - equal: {path: "spec.template.metadata.labels['app.kubernetes.io/component']", value: mariadb}
+      - equal: {path: "spec.selector.matchLabels['app.kubernetes.io/component']", value: mariadb}
+  - it: configures database and credentials from the generated Secret
+    template: mariadb-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: MARIADB_DATABASE, value: wavelog}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: MARIADB_USER, value: wavelog}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MARIADB_PASSWORD
+            valueFrom: {secretKeyRef: {name: RELEASE-NAME-wavelog-mariadb, key: mariadb-password}}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MARIADB_ROOT_PASSWORD
+            valueFrom: {secretKeyRef: {name: RELEASE-NAME-wavelog-mariadb, key: mariadb-root-password}}
+  - it: requests 8Gi of storage
+    template: mariadb-statefulset.yaml
+    asserts:
+      - equal: {path: "spec.volumeClaimTemplates[0].spec.resources.requests.storage", value: 8Gi}
+  - it: gates readiness on InnoDB initialisation
+    template: mariadb-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command
+          value: [healthcheck.sh, --connect, --innodb_initialized]
+  - it: exposes 3306 on the mariadb Service
+    template: mariadb-service.yaml
+    asserts:
+      - equal: {path: metadata.name, value: RELEASE-NAME-wavelog-mariadb}
+      - equal: {path: "spec.ports[0].port", value: 3306}
+      - equal: {path: "spec.selector['app.kubernetes.io/component']", value: mariadb}
+  - it: generates a Secret with both keys
+    template: mariadb-secret.yaml
+    asserts:
+      - isKind: {of: Secret}
+      - equal: {path: metadata.name, value: RELEASE-NAME-wavelog-mariadb}
+      - exists: {path: "data.mariadb-password"}
+      - exists: {path: "data.mariadb-root-password"}
+  - it: uses an existing Secret and renders none
+    set: {mariadb.auth.existingSecret: dbs}
+    asserts:
+      - hasDocuments: {count: 0}
+        template: mariadb-secret.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MARIADB_PASSWORD
+            valueFrom: {secretKeyRef: {name: dbs, key: mariadb-password}}
+        template: mariadb-statefulset.yaml
+  - it: renders nothing when using an external database
+    set: {mariadb.enabled: false, externalDatabase.host: db.example.com}
+    asserts:
+      - hasDocuments: {count: 0}
+        template: mariadb-statefulset.yaml
+      - hasDocuments: {count: 0}
+        template: mariadb-service.yaml
+      - hasDocuments: {count: 0}
+        template: mariadb-secret.yaml
+  - it: fails when external database has no host
+    template: validate.yaml
+    set: {mariadb.enabled: false}
+    asserts:
+      - failedTemplate: {errorMessage: "externalDatabase.host is required when mariadb.enabled=false"}
+  - it: validates cleanly with a host
+    template: validate.yaml
+    set: {mariadb.enabled: false, externalDatabase.host: db.example.com}
+    asserts:
+      - hasDocuments: {count: 0}

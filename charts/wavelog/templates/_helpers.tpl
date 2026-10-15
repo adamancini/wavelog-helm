@@ -97,3 +97,54 @@ cookie-less kubelet probes loop. In wizard mode probe a static file instead.
   mountPath: /var/www/html/application/logs
   subPath: logs
 {{- end -}}
+
+{{/*
+Labels selecting Wavelog application pods only. The component label keeps the
+Wavelog Service and Deployment from also matching MariaDB pods.
+*/}}
+{{- define "wavelog.appSelectorLabels" -}}
+{{ include "wavelog.selectorLabels" . }}
+app.kubernetes.io/component: wavelog
+{{- end -}}
+
+{{- define "wavelog.mariadb.selectorLabels" -}}
+{{ include "wavelog.selectorLabels" . }}
+app.kubernetes.io/component: mariadb
+{{- end -}}
+
+{{- define "wavelog.mariadb.secretName" -}}
+{{- default (include "wavelog.mariadb.fullname" .) .Values.mariadb.auth.existingSecret -}}
+{{- end -}}
+
+{{/* Database host: the bundled Service, or externalDatabase.host (required). */}}
+{{- define "wavelog.db.host" -}}
+{{- if .Values.mariadb.enabled -}}
+{{- include "wavelog.mariadb.fullname" . -}}
+{{- else -}}
+{{- required "externalDatabase.host is required when mariadb.enabled=false" .Values.externalDatabase.host -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "wavelog.db.port" -}}
+{{- if .Values.mariadb.enabled -}}3306{{- else -}}{{- .Values.externalDatabase.port -}}{{- end -}}
+{{- end -}}
+
+{{- define "wavelog.db.name" -}}
+{{- if .Values.mariadb.enabled -}}{{- .Values.mariadb.auth.database -}}{{- else -}}{{- .Values.externalDatabase.database -}}{{- end -}}
+{{- end -}}
+
+{{- define "wavelog.db.user" -}}
+{{- if .Values.mariadb.enabled -}}{{- .Values.mariadb.auth.username -}}{{- else -}}{{- .Values.externalDatabase.username -}}{{- end -}}
+{{- end -}}
+
+{{- define "wavelog.db.secretName" -}}
+{{- if .Values.mariadb.enabled -}}
+{{- include "wavelog.mariadb.secretName" . -}}
+{{- else -}}
+{{- .Values.externalDatabase.existingSecret -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "wavelog.db.passwordKey" -}}
+{{- if .Values.mariadb.enabled -}}{{- .Values.mariadb.auth.passwordKey -}}{{- else -}}{{- .Values.externalDatabase.passwordKey -}}{{- end -}}
+{{- end -}}
