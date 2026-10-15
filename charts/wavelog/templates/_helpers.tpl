@@ -208,3 +208,16 @@ app.kubernetes.io/component: mariadb
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "wavelog.backup.claimName" -}}
+{{- if .Values.backup.persistence.existingClaim -}}
+{{- .Values.backup.persistence.existingClaim -}}
+{{- else -}}
+{{- printf "%s-backup" (include "wavelog.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "wavelog.backup.selectorLabels" -}}
+{{ include "wavelog.selectorLabels" . }}
+app.kubernetes.io/component: backup
+{{- end -}}

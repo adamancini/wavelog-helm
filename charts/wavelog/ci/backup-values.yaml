@@ -1,0 +1,5 @@
+baseUrl: https://wavelog.example.com/
+install:
+  mode: declarative
+backup:
+  enabled: true

@@ -1,0 +1,114 @@
+{{- if .Values.backup.enabled }}
+{{- $image := printf "%s:%s" .Values.mariadb.image.repository (toString .Values.mariadb.image.tag) }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "wavelog.fullname" . }}-backup
+  labels:
+    {{- include "wavelog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "wavelog.backup.selectorLabels" . | nindent 12 }}
+          {{- with .Values.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "wavelog.serviceAccountName" . }}
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            fsGroup: 999
+          initContainers:
+            # Volumes such as local-path ignore fsGroup, so hand the claim to
+            # the unprivileged mysql user (uid 999) before the dump runs.
+            - name: volume-permissions
+              image: {{ $image | quote }}
+              imagePullPolicy: {{ .Values.mariadb.image.pullPolicy }}
+              command:
+                - /bin/sh
+                - -c
+                - chown 999:999 /backup && chmod 770 /backup
+              securityContext:
+                runAsUser: 0
+                runAsNonRoot: false
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+                  add: [CHOWN, FOWNER, DAC_OVERRIDE]
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          containers:
+            - name: backup
+              image: {{ $image | quote }}
+              imagePullPolicy: {{ .Values.mariadb.image.pullPolicy }}
+              command: ["bash", "/scripts/backup.sh"]
+              env:
+                - name: DB_HOST
+                  value: {{ include "wavelog.db.host" . | quote }}
+                - name: DB_PORT
+                  value: {{ include "wavelog.db.port" . | quote }}
+                - name: DB_NAME
+                  value: {{ include "wavelog.db.name" . | quote }}
+                - name: DB_USER
+                  value: {{ include "wavelog.db.user" . | quote }}
+                - name: MYSQL_PWD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "wavelog.db.secretName" . }}
+                      key: {{ include "wavelog.db.passwordKey" . }}
+                - name: RETENTION
+                  value: {{ .Values.backup.retention | quote }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              {{- with .Values.backup.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ include "wavelog.backup.claimName" . }}
+            - name: scripts
+              configMap:
+                name: {{ include "wavelog.fullname" . }}-backup
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

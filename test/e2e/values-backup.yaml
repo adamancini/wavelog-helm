@@ -1,0 +1,25 @@
+baseUrl: https://wavelog.example.com/
+install:
+  mode: declarative
+  admin:
+    username: admin
+    callsign: N0CALL
+    locator: AA00aa
+apiKeys:
+  - description: e2e logger
+    rights: rw
+    user: admin
+    existingSecret: wl-apikey
+    secretKey: api-key
+persistence:
+  size: 1Gi
+mariadb:
+  persistence:
+    size: 1Gi
+backup:
+  enabled: true
+  # Never fires on its own; the scenario creates Jobs from the CronJob by hand.
+  schedule: "0 0 31 2 *"
+  retention: 2
+  persistence:
+    size: 1Gi
