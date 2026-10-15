@@ -10,6 +10,3 @@ oauth2Proxy:
   enabled: true
   issuerUrl: http://jwks
   existingSecret: wl-oauth2-proxy
-  extraArgs:
-    # Redirect unauthenticated requests instead of rendering the sign-in page.
-    - --skip-provider-button=true

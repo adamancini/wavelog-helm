@@ -198,13 +198,14 @@ spec:
             - --http-address=0.0.0.0:4180
             - --upstream=http://127.0.0.1:80/
             - --provider=oidc
-            - --oidc-issuer-url={{ .Values.oauth2Proxy.issuerUrl }}
+            - {{ printf "--oidc-issuer-url=%s" .Values.oauth2Proxy.issuerUrl | toJson }}
             - --pass-access-token=true
             - --set-xauthrequest=true
             - --reverse-proxy=true
             - --email-domain=*
+            - --skip-provider-button=true
             {{- range .Values.oauth2Proxy.skipAuthRoutes }}
-            - --skip-auth-route={{ . }}
+            - {{ printf "--skip-auth-route=%s" . | toJson }}
             {{- end }}
             {{- range .Values.oauth2Proxy.extraArgs }}
             - {{ . | toJson }}

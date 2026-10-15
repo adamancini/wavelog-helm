@@ -135,6 +135,30 @@ grep -q '"status":"created"\|"status":"ok"' "$E2E_TMP/qso.json" \
 printf 'ok: API QSO accepted through the proxy (%s)\n' "$code" >&2
 assert_eq 1 "$(e2e_sql "SELECT COUNT(*) FROM TABLE_HRD_CONTACTS_V01 WHERE COL_CALL='K3GHI'")" "QSO stored via the proxy"
 
+# The API skip route must not open a way around the proxy: traversal paths
+# never reach the dashboard, and a client-supplied token header on a skipped
+# route never logs anyone in.
+admin_token=$(mint token "$KEYS/idp.pem" "$ISS" "$SUB")
+for path in /index.php/api/../dashboard /index.php/api/%2e%2e/dashboard /index.php/api/..%2fdashboard \
+  /index.php/api/%2e%2e%2fdashboard; do
+  code=$(curl -s --path-as-is -o "$E2E_TMP/probe.html" -w '%{http_code}' "$url$path")
+  e2e_log "unauthenticated GET $path -> $code"
+  [[ $code != 200 ]] || e2e_die "GET $path returned 200 through the proxy"
+  ! grep -q N0CALL "$E2E_TMP/probe.html" || e2e_die "GET $path served the dashboard"
+done
+printf 'ok: traversal paths do not bypass the proxy\n' >&2
+for path in /index.php/api/../header_auth/login /index.php/api/%2e%2e/header_auth/login \
+  /index.php/api/..%2fheader_auth/login /index.php/api/nonexistent; do
+  rm -f "$E2E_TMP/cookies"
+  curl -s --path-as-is -o /dev/null -w '%{http_code} %{redirect_url}\n' -c "$E2E_TMP/cookies" -b "$E2E_TMP/cookies" \
+    -H "X-Forwarded-Access-Token: $admin_token" "$url$path" >"$E2E_TMP/probe.out"
+  e2e_log "token GET $path -> $(cat "$E2E_TMP/probe.out")"
+  ! grep -q '/dashboard' "$E2E_TMP/probe.out" || e2e_die "client token on $path logged in"
+  code=$(curl -s --path-as-is -o "$E2E_TMP/probe.html" -w '%{http_code}' -c "$E2E_TMP/cookies" -b "$E2E_TMP/cookies" "$url/index.php/dashboard")
+  [[ $code != 200 ]] || e2e_die "dashboard served after client token on $path"
+done
+printf 'ok: client-supplied token on skipped routes logs nobody in\n' >&2
+
 # Another user holding the identity: bootstrap refuses to steal it.
 # Non-strict mode fills the remaining NOT NULL columns with implicit defaults.
 e2e_sql "UPDATE users SET external_account=NULL WHERE user_name='admin';

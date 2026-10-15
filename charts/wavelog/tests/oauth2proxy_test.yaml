@@ -28,6 +28,7 @@ tests:
             - --set-xauthrequest=true
             - --reverse-proxy=true
             - --email-domain=*
+            - --skip-provider-button=true
             - --skip-auth-route=^/index.php/api/
   - it: appends extraArgs and honours skipAuthRoutes
     template: deployment.yaml
