@@ -19,6 +19,11 @@ helm install wavelog oci://ghcr.io/<owner>/charts/wavelog \
 Replace `<owner>` with the account that publishes the chart. Run `helm get notes wavelog` to
 see how to read the generated admin password.
 
+Resource names below use `<fullname>`. It equals the release name when that already contains
+"wavelog" (so `helm install wavelog` gives `wavelog`, `wavelog-app`, `wavelog-mariadb`,
+`wavelog-backup`), otherwise `<release>-wavelog`. `fullnameOverride` replaces it. Substitute
+your value; `<release>` is the Helm release name.
+
 Avoid `helm install --wait` when `backup.enabled=true` (see [Backups](#backups-and-restore)).
 
 ## Examples
@@ -42,7 +47,7 @@ install:
 Read the generated admin password:
 
 ```bash
-kubectl get secret <release>-wavelog-app -o jsonpath='{.data.admin-password}' | base64 -d
+kubectl get secret <fullname>-app -o jsonpath='{.data.admin-password}' | base64 -d
 ```
 
 Generated secrets (database passwords, encryption key, admin password) survive `helm upgrade`
@@ -53,7 +58,7 @@ them with `config.existingSecret` (key `encryption-key`), `install.admin.existin
 `mariadb.auth.existingSecret`. An `existingSecret` always wins over a generated one.
 
 If you rotate the app Secret outside Helm (encryption key or admin password), run
-`kubectl rollout restart deployment/<release>-wavelog` so the pod picks it up. Changing the
+`kubectl rollout restart deployment/<fullname>` so the pod picks it up. Changing the
 encryption key also invalidates the cron token derived from it.
 
 `install.dbWaitSeconds` bounds how long the init container waits for the database. An
@@ -202,6 +207,9 @@ Set `baseUrl` to the public URL; Wavelog builds its links from it.
 - bundled MariaDB: ingress on 3306 only from Wavelog pods, and from backup Job pods when
   `backup.enabled`.
 
+Anything else that must reach MariaDB, such as a restore pod, has to carry the backup pods'
+labels (see [Backups and restore](#backups-and-restore)).
+
 Egress is not restricted: Wavelog calls LoTW, Club Log, eQSL, QRZ and the JWKS URI. The app
 port accepts traffic from any source, so an ingress controller or gateway in another namespace
 needs no extra rule. Your CNI must enforce NetworkPolicy.
@@ -240,10 +248,13 @@ binding, because the PVC binds only when the first Job runs. Use an `Immediate` 
 Run a one-off backup:
 
 ```bash
-kubectl create job --from=cronjob/<release>-wavelog-backup manual-backup
+kubectl create job --from=cronjob/<fullname>-backup manual-backup
 ```
 
-Restore the newest dump with a throwaway pod that mounts the backup claim:
+Restore the newest dump with a throwaway pod that mounts the backup claim. Its labels must match
+the backup pods' (`app.kubernetes.io/name` is the chart name unless `nameOverride` is set,
+`app.kubernetes.io/instance` is the release name), or `networkPolicy.enabled=true` blocks it from
+reaching MariaDB:
 
 ```bash
 kubectl apply -f - <<'YAML'
@@ -251,6 +262,10 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: wavelog-restore
+  labels:
+    app.kubernetes.io/name: wavelog
+    app.kubernetes.io/instance: <release>
+    app.kubernetes.io/component: backup
 spec:
   securityContext: {runAsUser: 999, runAsGroup: 999, fsGroup: 999}
   containers:
@@ -258,13 +273,13 @@ spec:
       image: docker.io/library/mariadb:11.8
       command: [sleep, "3600"]
       env:
-        - {name: DB_HOST, value: "<release>-wavelog-mariadb"}
+        - {name: DB_HOST, value: "<fullname>-mariadb"}
         - name: MYSQL_PWD
-          valueFrom: {secretKeyRef: {name: "<release>-wavelog-mariadb", key: mariadb-password}}
+          valueFrom: {secretKeyRef: {name: "<fullname>-mariadb", key: mariadb-password}}
       volumeMounts: [{name: backup, mountPath: /backup, readOnly: true}]
   volumes:
     - name: backup
-      persistentVolumeClaim: {claimName: "<release>-wavelog-backup"}
+      persistentVolumeClaim: {claimName: "<fullname>-backup"}
 YAML
 kubectl wait --for=condition=Ready pod/wavelog-restore
 kubectl exec wavelog-restore -- sh -c \
@@ -273,7 +288,7 @@ kubectl delete pod wavelog-restore
 ```
 
 For a specific dump, run
-`gunzip -c /backup/wavelog-<timestamp>.sql.gz | mariadb -h <release>-wavelog-mariadb -u wavelog wavelog`.
+`gunzip -c /backup/wavelog-<timestamp>.sql.gz | mariadb -h <fullname>-mariadb -u wavelog wavelog`.
 With an external database use `externalDatabase.host`, username and database, and the password
 from its Secret.
 
@@ -283,8 +298,8 @@ With `install.mode=wizard`:
 
 1. Install with `baseUrl` set and wait for the pods to be ready.
 2. Open `<baseUrl>install/` (port-forward the Service if there is no Ingress).
-3. Enter the database host (`<release>-wavelog-mariadb`), name (`wavelog`) and user
-   (`wavelog`); take the password from the `<release>-wavelog-mariadb` Secret
+3. Enter the database host (`<fullname>-mariadb`), name (`wavelog`) and user
+   (`wavelog`); take the password from the `<fullname>-mariadb` Secret
    (`mariadb-password`).
 4. Finish the installer and log in with the account you created.
 
