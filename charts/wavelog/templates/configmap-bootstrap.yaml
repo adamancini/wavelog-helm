@@ -1,0 +1,11 @@
+{{- if eq .Values.install.mode "declarative" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wavelog.fullname" . }}-bootstrap
+  labels:
+    {{- include "wavelog.labels" . | nindent 4 }}
+data:
+  bootstrap.php: |
+    {{- .Files.Get "files/bootstrap.php" | nindent 4 }}
+{{- end }}

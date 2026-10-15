@@ -1,6 +1,8 @@
 suite: deployment
 templates:
   - deployment.yaml
+set:
+  baseUrl: https://wavelog.example.com/
 tests:
   - it: runs a single replica with Recreate strategy
     asserts:
@@ -92,6 +94,7 @@ tests:
             - {name: data, mountPath: /var/www/html/images/eqsl_card_images, subPath: images/eqsl_card_images}
             - {name: cache, mountPath: /var/www/html/application/cache, subPath: cache}
             - {name: cache, mountPath: /var/www/html/application/logs, subPath: logs}
+            - {name: config, mountPath: /var/www/html/application/config/docker}
   - it: init container mounts match the main container in wizard mode
     set: {install.mode: wizard}
     asserts:

@@ -21,8 +21,41 @@ cron:
   enabled: true
 
 install:
-  # declarative | wizard
+  # declarative: the bootstrap init container renders config and installs the
+  # schema. wizard: use Wavelog's web installer.
   mode: declarative
+  # How long the bootstrap init container waits for the database.
+  dbWaitSeconds: 300
+  admin:
+    username: admin
+    email: admin@example.com
+    callsign: N0CALL
+    locator: AA00aa
+    firstName: ""
+    lastName: ""
+    timezone: 0
+    dxcc: 0
+    city: ""
+    language: english
+    # Existing Secret holding the admin password under passwordKey. When unset
+    # a password is generated into the <fullname>-app Secret.
+    existingSecret: ""
+    passwordKey: admin-password
+
+config:
+  locator: AA00aa
+  # hamqth | qrz | qrzcq | qrzru | qrzcall
+  callbook: hamqth
+  logThreshold: 0
+  # Existing Secret with keys: encryption-key and, optionally,
+  # callbook-username, callbook-password, qrzcall-token.
+  existingSecret: ""
+  # Extra $config[key] = value entries; any scalar, list or map.
+  extra: {}
+
+auth:
+  # local | header
+  mode: local
 
 mariadb:
   # false uses externalDatabase instead of the bundled MariaDB.

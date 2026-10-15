@@ -1,4 +1,3 @@
-# Default-ish values; baseUrl handling arrives in a later task.
 baseUrl: https://wavelog.example.com/
 install:
-  mode: wizard
+  mode: declarative

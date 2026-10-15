@@ -69,7 +69,7 @@ cookie-less kubelet probes loop. In wizard mode probe a static file instead.
 
 {{- define "wavelog.writablePaths" -}}
 /var/www/html/uploads /var/www/html/userdata /var/www/html/backup /var/www/html/images/eqsl_card_images /var/www/html/application/cache /var/www/html/application/logs
-{{- if eq .Values.install.mode "wizard" }} /var/www/html/application/config/docker{{ end }}
+{{- " " }}/var/www/html/application/config/docker
 {{- end -}}
 
 {{- define "wavelog.volumeMounts" -}}
@@ -85,17 +85,44 @@ cookie-less kubelet probes loop. In wizard mode probe a static file instead.
 - name: data
   mountPath: /var/www/html/images/eqsl_card_images
   subPath: images/eqsl_card_images
-{{- if eq .Values.install.mode "wizard" }}
-- name: data
-  mountPath: /var/www/html/application/config/docker
-  subPath: config
-{{- end }}
 - name: cache
   mountPath: /var/www/html/application/cache
   subPath: cache
 - name: cache
   mountPath: /var/www/html/application/logs
   subPath: logs
+{{- end -}}
+
+{{/*
+Where Wavelog reads its generated config. Wizard mode persists it on the data
+volume; declarative mode re-renders it on every start into an emptyDir.
+Callers add readOnly for the main container.
+*/}}
+{{- define "wavelog.configMount" -}}
+{{- if eq .Values.install.mode "wizard" -}}
+- name: data
+  mountPath: /var/www/html/application/config/docker
+  subPath: config
+{{- else -}}
+- name: config
+  mountPath: /var/www/html/application/config/docker
+{{- end -}}
+{{- end -}}
+
+{{- define "wavelog.app.secretName" -}}
+{{- default (printf "%s-app" (include "wavelog.fullname" .)) .Values.config.existingSecret -}}
+{{- end -}}
+
+{{- define "wavelog.admin.secretName" -}}
+{{- default (printf "%s-app" (include "wavelog.fullname" .)) .Values.install.admin.existingSecret -}}
+{{- end -}}
+
+{{/* Public URL with exactly one trailing slash; required in declarative mode. */}}
+{{- define "wavelog.baseUrl" -}}
+{{- if eq .Values.install.mode "declarative" -}}
+{{- $_ := required "baseUrl is required when install.mode=declarative" .Values.baseUrl -}}
+{{- end -}}
+{{- if .Values.baseUrl -}}{{- printf "%s/" (trimSuffix "/" .Values.baseUrl) -}}{{- end -}}
 {{- end -}}
 
 {{/*

@@ -47,6 +47,57 @@ spec:
             allowPrivilegeEscalation: false
           volumeMounts:
             {{- include "wavelog.volumeMounts" . | nindent 12 }}
+            {{- include "wavelog.configMount" . | nindent 12 }}
+        {{- if eq .Values.install.mode "declarative" }}
+        - name: bootstrap
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["php", "/bootstrap/bootstrap.php"]
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 33
+            allowPrivilegeEscalation: false
+          env:
+            - {name: WL_CONFIG_DIR, value: /var/www/html/application/config/docker}
+            - {name: WL_BASE_URL, value: {{ include "wavelog.baseUrl" . | toJson }}}
+            - {name: WL_LOCATOR, value: {{ .Values.config.locator | toString | toJson }}}
+            - {name: WL_CALLBOOK, value: {{ .Values.config.callbook | toString | toJson }}}
+            - {name: WL_LOG_THRESHOLD, value: {{ .Values.config.logThreshold | toString | toJson }}}
+            - name: WL_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef: {name: {{ include "wavelog.app.secretName" . }}, key: encryption-key}
+            {{- range $env, $key := dict "WL_CALLBOOK_USERNAME" "callbook-username" "WL_CALLBOOK_PASSWORD" "callbook-password" "WL_QRZCALL_TOKEN" "qrzcall-token" }}
+            - name: {{ $env }}
+              valueFrom:
+                secretKeyRef: {name: {{ include "wavelog.app.secretName" $ }}, key: {{ $key }}, optional: true}
+            {{- end }}
+            - {name: WL_DB_HOST, value: {{ include "wavelog.db.host" . | toJson }}}
+            - {name: WL_DB_PORT, value: {{ include "wavelog.db.port" . | toString | toJson }}}
+            - {name: WL_DB_NAME, value: {{ include "wavelog.db.name" . | toJson }}}
+            - {name: WL_DB_USER, value: {{ include "wavelog.db.user" . | toJson }}}
+            - name: WL_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "wavelog.db.secretName" . }}, key: {{ include "wavelog.db.passwordKey" . }}}
+            - {name: WL_DB_WAIT_SECONDS, value: {{ .Values.install.dbWaitSeconds | toString | toJson }}}
+            - {name: WL_ADMIN_USERNAME, value: {{ .Values.install.admin.username | toString | toJson }}}
+            - {name: WL_ADMIN_EMAIL, value: {{ .Values.install.admin.email | toString | toJson }}}
+            - {name: WL_ADMIN_CALLSIGN, value: {{ .Values.install.admin.callsign | toString | toJson }}}
+            - {name: WL_ADMIN_LOCATOR, value: {{ .Values.install.admin.locator | toString | toJson }}}
+            - {name: WL_ADMIN_FIRSTNAME, value: {{ .Values.install.admin.firstName | toString | toJson }}}
+            - {name: WL_ADMIN_LASTNAME, value: {{ .Values.install.admin.lastName | toString | toJson }}}
+            - {name: WL_ADMIN_TIMEZONE, value: {{ .Values.install.admin.timezone | toString | toJson }}}
+            - {name: WL_ADMIN_DXCC, value: {{ .Values.install.admin.dxcc | toString | toJson }}}
+            - {name: WL_ADMIN_CITY, value: {{ .Values.install.admin.city | toString | toJson }}}
+            - {name: WL_ADMIN_LANGUAGE, value: {{ .Values.install.admin.language | toString | toJson }}}
+            - name: WL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "wavelog.admin.secretName" . }}, key: {{ .Values.install.admin.passwordKey }}}
+            - {name: WL_EXTRA_CONFIG_JSON, value: {{ toJson .Values.config.extra | toJson }}}
+            - {name: WL_AUTH_MODE, value: {{ default "local" .Values.auth.mode | toJson }}}
+          volumeMounts:
+            {{- include "wavelog.configMount" . | nindent 12 }}
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+        {{- end }}
       containers:
         - name: wavelog
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -93,6 +144,13 @@ spec:
           {{- end }}
           volumeMounts:
             {{- include "wavelog.volumeMounts" . | nindent 12 }}
+            {{- if eq .Values.install.mode "declarative" }}
+            - name: config
+              mountPath: /var/www/html/application/config/docker
+              readOnly: true
+            {{- else }}
+            {{- include "wavelog.configMount" . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: data
           {{- if .Values.persistence.enabled }}
@@ -103,6 +161,13 @@ spec:
           {{- end }}
         - name: cache
           emptyDir: {}
+        {{- if eq .Values.install.mode "declarative" }}
+        - name: config
+          emptyDir: {}
+        - name: bootstrap
+          configMap:
+            name: {{ include "wavelog.fullname" . }}-bootstrap
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

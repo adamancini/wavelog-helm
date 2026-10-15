@@ -1,0 +1,102 @@
+suite: bootstrap init container
+templates:
+  - deployment.yaml
+  - configmap-bootstrap.yaml
+set:
+  baseUrl: https://w.example.com
+tests:
+  - it: runs bootstrap after volume-permissions in declarative mode
+    template: deployment.yaml
+    asserts:
+      - equal: {path: "spec.template.spec.initContainers[0].name", value: volume-permissions}
+      - equal: {path: "spec.template.spec.initContainers[1].name", value: bootstrap}
+      - equal: {path: "spec.template.spec.initContainers[1].command", value: ["php", "/bootstrap/bootstrap.php"]}
+      - equal: {path: "spec.template.spec.initContainers[1].securityContext.runAsUser", value: 999}
+      - equal: {path: "spec.template.spec.initContainers[1].securityContext.runAsGroup", value: 33}
+  - it: mounts the generated config read-only in the main container
+    template: deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: config, mountPath: /var/www/html/application/config/docker, readOnly: true}
+      - contains:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          content: {name: config, mountPath: /var/www/html/application/config/docker}
+  - it: lets volume-permissions fix the config dir
+    template: deployment.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: application/config/docker
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content: {name: config, mountPath: /var/www/html/application/config/docker}
+  - it: has no bootstrap in wizard mode
+    template: deployment.yaml
+    set: {install.mode: wizard}
+    asserts:
+      - lengthEqual: {path: "spec.template.spec.initContainers", count: 1}
+      - equal: {path: "spec.template.spec.initContainers[0].name", value: volume-permissions}
+  - it: renders no bootstrap ConfigMap in wizard mode
+    template: configmap-bootstrap.yaml
+    set: {install.mode: wizard}
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: ships bootstrap.php in a ConfigMap
+    template: configmap-bootstrap.yaml
+    asserts:
+      - equal: {path: metadata.name, value: RELEASE-NAME-wavelog-bootstrap}
+      - matchRegex: {path: 'data["bootstrap.php"]', pattern: "function render_config"}
+  - it: normalizes baseUrl with a trailing slash
+    template: deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_BASE_URL, value: "https://w.example.com/"}
+  - it: requires baseUrl in declarative mode
+    template: deployment.yaml
+    set: {baseUrl: ""}
+    asserts:
+      - failedTemplate:
+          errorMessage: baseUrl is required when install.mode=declarative
+  - it: passes config.extra as JSON
+    template: deployment.yaml
+    set: {config.extra: {disable_version_check: true}}
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_EXTRA_CONFIG_JSON, value: '{"disable_version_check":true}'}
+  - it: passes special characters byte-identically
+    template: deployment.yaml
+    set: {install.admin.city: "O'Brien \"$x\" \\ end"}
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_ADMIN_CITY, value: "O'Brien \"$x\" \\ end"}
+  - it: reads the encryption key from the app Secret, callbook keys optionally
+    template: deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: WL_ENCRYPTION_KEY
+            valueFrom: {secretKeyRef: {name: RELEASE-NAME-wavelog-app, key: encryption-key}}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: WL_QRZCALL_TOKEN
+            valueFrom: {secretKeyRef: {name: RELEASE-NAME-wavelog-app, key: qrzcall-token, optional: true}}
+  - it: honours existing secrets for encryption key and admin password
+    template: deployment.yaml
+    set: {config.existingSecret: cfg, install.admin.existingSecret: adm, install.admin.passwordKey: pw}
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: WL_ENCRYPTION_KEY
+            valueFrom: {secretKeyRef: {name: cfg, key: encryption-key}}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: WL_ADMIN_PASSWORD
+            valueFrom: {secretKeyRef: {name: adm, key: pw}}
