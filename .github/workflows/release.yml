@@ -24,13 +24,27 @@ jobs:
         with:
           version: v4.2.4
 
-      - name: Package Helm Chart
-        run: |
-          helm package charts/wavelog --destination .deploy
-
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF_NAME#chart-}" >> "$GITHUB_OUTPUT"
+
+      - name: Check tag matches Chart.yaml version
+        run: |
+          chart_version="$(yq -r .version charts/wavelog/Chart.yaml)"
+          if [ "v${chart_version}" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match Chart.yaml version ${chart_version}"
+            exit 1
+          fi
+
+      - name: Lint and unit test
+        run: |
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3 --verify=false
+          for f in charts/wavelog/ci/*.yaml; do helm lint --strict charts/wavelog -f "$f"; done
+          helm unittest charts/wavelog
+
+      - name: Package Helm Chart
+        run: |
+          helm package charts/wavelog --destination .deploy
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
