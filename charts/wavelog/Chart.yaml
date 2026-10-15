@@ -1,0 +1,15 @@
+apiVersion: v2
+name: wavelog
+description: A Helm chart for Wavelog, a web-based amateur radio logbook
+type: application
+version: 0.1.0
+appVersion: "3.2.4"
+home: https://www.wavelog.org
+sources:
+  - https://github.com/wavelog/wavelog
+keywords:
+  - amateur-radio
+  - ham-radio
+  - logbook
+maintainers:
+  - name: adamancini

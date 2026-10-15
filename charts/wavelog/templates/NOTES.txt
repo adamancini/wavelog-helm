@@ -1,0 +1,9 @@
+Wavelog {{ .Chart.AppVersion }} has been deployed as {{ include "wavelog.fullname" . }}.
+
+Web UI (port-forward):
+  kubectl port-forward svc/{{ include "wavelog.fullname" . }} -n {{ .Release.Namespace }} 8080:{{ .Values.service.port }}
+  Then open http://localhost:8080
+{{- if eq .Values.install.mode "wizard" }}
+
+install.mode=wizard: complete the web installer on first visit.
+{{- end }}

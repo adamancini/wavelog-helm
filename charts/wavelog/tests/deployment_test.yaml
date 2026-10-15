@@ -1,0 +1,80 @@
+suite: deployment
+templates:
+  - deployment.yaml
+tests:
+  - it: runs a single replica with Recreate strategy
+    asserts:
+      - equal: {path: "spec.replicas", value: 1}
+      - equal: {path: "spec.strategy.type", value: Recreate}
+  - it: uses the appVersion image by default
+    asserts:
+      - equal: {path: "spec.template.spec.containers[?(@.name=='wavelog')].image", value: "ghcr.io/wavelog/wavelog:3.2.4"}
+  - it: sets PHP_MEMORY_LIMIT
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: PHP_MEMORY_LIMIT, value: "256M"}
+  - it: does not disable cron by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: DISABLE_CRON, value: "true"}
+  - it: disables cron when cron.enabled=false
+    set: {cron.enabled: false}
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: DISABLE_CRON, value: "true"}
+  - it: probes the login route
+    asserts:
+      - equal: {path: "spec.template.spec.containers[0].livenessProbe.httpGet.path", value: /index.php/user/login}
+      - equal: {path: "spec.template.spec.containers[0].readinessProbe.httpGet.path", value: /index.php/user/login}
+      - equal: {path: "spec.template.spec.containers[0].livenessProbe.initialDelaySeconds", value: 30}
+  - it: mounts persistent data via subPaths
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: data, mountPath: /var/www/html/uploads, subPath: uploads}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: data, mountPath: /var/www/html/userdata, subPath: userdata}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: data, mountPath: /var/www/html/backup, subPath: backup}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: data, mountPath: /var/www/html/images/eqsl_card_images, subPath: images/eqsl_card_images}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: cache, mountPath: /var/www/html/application/cache, subPath: cache}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: cache, mountPath: /var/www/html/application/logs, subPath: logs}
+  - it: persists the config dir in wizard mode
+    set: {install.mode: wizard}
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: data, mountPath: /var/www/html/application/config/docker, subPath: config}
+  - it: uses the PVC by default
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content: {name: data, persistentVolumeClaim: {claimName: RELEASE-NAME-wavelog-data}}
+  - it: deployment uses the existing claim
+    set: {persistence.existingClaim: foo}
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content: {name: data, persistentVolumeClaim: {claimName: foo}}
+  - it: deployment uses emptyDir when persistence is disabled
+    set: {persistence.enabled: false}
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content: {name: data, emptyDir: {}}
+  - it: probes a static file in wizard mode (installer redirect loops without cookies)
+    set: {install.mode: wizard}
+    asserts:
+      - equal: {path: "spec.template.spec.containers[0].livenessProbe.httpGet.path", value: /favicon.ico}
+      - equal: {path: "spec.template.spec.containers[0].readinessProbe.httpGet.path", value: /favicon.ico}

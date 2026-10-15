@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wavelog.fullname" . }}
+  labels:
+    {{- include "wavelog.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "wavelog.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "wavelog.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "wavelog.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: wavelog
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: PHP_MEMORY_LIMIT
+              value: {{ .Values.php.memoryLimit | quote }}
+            - name: PHP_UPLOAD_MAX_FILESIZE
+              value: {{ .Values.php.uploadMaxFilesize | quote }}
+            - name: PHP_POST_MAX_SIZE
+              value: {{ .Values.php.postMaxSize | quote }}
+            - name: PHP_MAX_EXECUTION_TIME
+              value: {{ .Values.php.maxExecutionTime | quote }}
+            {{- if not .Values.cron.enabled }}
+            - name: DISABLE_CRON
+              value: "true"
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: {{ include "wavelog.probePath" . }}
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: {{ include "wavelog.probePath" . }}
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/html/uploads
+              subPath: uploads
+            - name: data
+              mountPath: /var/www/html/userdata
+              subPath: userdata
+            - name: data
+              mountPath: /var/www/html/backup
+              subPath: backup
+            - name: data
+              mountPath: /var/www/html/images/eqsl_card_images
+              subPath: images/eqsl_card_images
+            {{- if eq .Values.install.mode "wizard" }}
+            - name: data
+              mountPath: /var/www/html/application/config/docker
+              subPath: config
+            {{- end }}
+            - name: cache
+              mountPath: /var/www/html/application/cache
+              subPath: cache
+            - name: cache
+              mountPath: /var/www/html/application/logs
+              subPath: logs
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "wavelog.dataClaimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: cache
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
