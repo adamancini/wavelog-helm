@@ -184,6 +184,11 @@ Notes:
 - Removing `adminIdentity` later does not unlink the admin account.
 - On each login Wavelog overwrites the user's name, email and callsign with the claims present
   in the token.
+- First and last name (`given_name`, `family_name`) stay editable in the account form, because
+  Wavelog requires both to save it and many IdPs leave them out of the access token. Set
+  `install.admin.firstName` and `lastName` so the admin account starts with them. Setting
+  `auth_headers_claim_config` in `auth.header.extra` replaces the whole claim map, including
+  this.
 
 ## Exposure
 

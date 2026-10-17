@@ -18,6 +18,8 @@ const WL_SSO_KEYS = [
     'buttonText' => 'auth_header_text',
     'logoutUrl' => 'auth_header_url_logout',
 ];
+// Claim-mapped user fields that stay editable in Wavelog's account form.
+const WL_SSO_EDITABLE_CLAIMS = ['user_firstname', 'user_lastname'];
 
 function fail(string $reason): void
 {
@@ -199,6 +201,16 @@ function render_sso(): void
         if ($count !== 1) {
             fail("$key not found once in sso.sample.php");
         }
+    }
+    // Wavelog requires a first and last name to save the account form, but the
+    // sample locks both to claims many IdPs leave out of the access token. Keep
+    // them editable; a claim that is present still overwrites them at login.
+    $php = rtrim($php) . "\n\n// Added by the Helm chart (names stay editable)\n";
+    foreach (WL_SSO_EDITABLE_CLAIMS as $field) {
+        if (!preg_match('/^\s*\'' . preg_quote($field, '/') . '\'\s*=>/m', $php)) {
+            fail("$field not found in sso.sample.php claim config");
+        }
+        $php .= '$config[\'auth_headers_claim_config\'][' . var_export($field, true) . "]['allow_manual_change'] = true;\n";
     }
     $extra = $sso['extra'] ?? [];
     if (!is_array($extra)) {
