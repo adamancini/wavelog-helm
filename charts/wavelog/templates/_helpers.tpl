@@ -68,7 +68,7 @@ cookie-less kubelet probes loop. In wizard mode probe a static file instead.
 {{- end -}}
 
 {{- define "wavelog.writablePaths" -}}
-/var/www/html/uploads /var/www/html/userdata /var/www/html/backup /var/www/html/images/eqsl_card_images /var/www/html/application/cache /var/www/html/application/logs
+/var/www/html/uploads /var/www/html/userdata /var/www/html/backup /var/www/html/images/eqsl_card_images /var/www/html/updates /var/www/html/application/cache /var/www/html/application/logs
 {{- " " }}/var/www/html/application/config/docker
 {{- end -}}
 
@@ -85,6 +85,10 @@ cookie-less kubelet probes loop. In wizard mode probe a static file instead.
 - name: data
   mountPath: /var/www/html/images/eqsl_card_images
   subPath: images/eqsl_card_images
+# Reference files Wavelog downloads (SuperCheckPartial, DOK, ...)
+- name: data
+  mountPath: /var/www/html/updates
+  subPath: updates
 - name: cache
   mountPath: /var/www/html/application/cache
   subPath: cache

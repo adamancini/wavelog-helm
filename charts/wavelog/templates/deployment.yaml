@@ -81,6 +81,12 @@ spec:
             - {name: WL_LOCATOR, value: {{ .Values.config.locator | toString | toJson }}}
             - {name: WL_CALLBOOK, value: {{ .Values.config.callbook | toString | toJson }}}
             - {name: WL_LOG_THRESHOLD, value: {{ .Values.config.logThreshold | toString | toJson }}}
+            {{- range .Values.cron.enableJobs }}
+            {{- if not (regexMatch "^[a-z0-9_]+$" (toString .)) }}
+            {{- fail "cron.enableJobs entries must be Wavelog cron job ids (lowercase letters, digits, underscores)" }}
+            {{- end }}
+            {{- end }}
+            - {name: WL_CRON_ENABLE_JSON, value: {{ .Values.cron.enableJobs | default list | toJson | toJson }}}
             - name: WL_ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef: {name: {{ include "wavelog.app.secretName" . }}, key: encryption-key}
@@ -134,6 +140,7 @@ spec:
             {{- end }}
             - {name: WL_API_KEYS_JSON, value: {{ toJson $keys | toJson }}}
           volumeMounts:
+            {{- include "wavelog.volumeMounts" . | nindent 12 }}
             {{- include "wavelog.configMount" . | nindent 12 }}
             - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
         {{- end }}

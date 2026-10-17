@@ -12,3 +12,5 @@ persistence:
 mariadb:
   persistence:
     size: 1Gi
+cron:
+  enableJobs: [vucc_grid_file]

@@ -368,25 +368,82 @@ function run_migrations(): void
     info("migrations at version $v");
 }
 
-// Load DXCC entities/prefixes/exceptions (the wizard's last step) when they
-// are missing: without them station DXCC can't be chosen and callsigns aren't
-// resolved to countries. Wavelog's own cron only refreshes every two months.
-// A failed download (e.g. Club Log unreachable) is logged, not fatal, and is
-// retried on the next start.
-function ensure_dxcc(mysqli $db): void
+// Reference data that a fresh install lacks: the wizard's last step loads
+// DXCC, and Wavelog's cron fills the rest only on each job's first scheduled
+// run (weeks away; VUCC grids not at all by default). Each entry: what to
+// check, and the Update controller action that fills it. Without DXCC,
+// station DXCC can't be chosen and callsigns aren't resolved to countries.
+const WL_REFERENCE_DATA = [
+    ['DXCC', ['table', 'dxcc_prefixes'], 'dxcc'],
+    ['VUCC grids', ['table', 'vuccgrids'], 'update_vucc_grids'],
+    ['LoTW users', ['table', 'lotw_users'], 'lotw_users'],
+    ['SOTA', ['table', 'sota_directory'], 'update_sota'],
+    ['WWFF', ['table', 'wwff_directory'], 'update_wwff'],
+    ['POTA', ['table', 'pota_directory'], 'update_pota'],
+    ['SuperCheckPartial', ['file', 'updates/clublog_scp.txt'], 'update_clublog_scp'],
+    ['DOK', ['file', 'updates/dok.txt'], 'update_dok'],
+];
+
+function reference_data_missing(mysqli $db, array $check): bool
 {
-    $prefixes = (int) $db->query('SELECT COUNT(*) FROM dxcc_prefixes')->fetch_row()[0];
-    if ($prefixes > 0) {
-        return;
+    [$kind, $what] = $check;
+    if ($kind === 'file') {
+        $path = WL_APP_DIR . '/' . $what;
+        return !is_file($path) || filesize($path) === 0;
     }
-    info('loading DXCC data');
-    [$rc, $out] = run_wavelog_cli('update', 'dxcc');
-    if ($rc !== 0 || !preg_match('/\bsuccess\b/', $out)) {
-        info('WARNING: DXCC data not loaded, will retry on next start: ' . substr(trim(strip_tags($out)), 0, 300));
-        return;
+    $stmt = $db->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?');
+    $stmt->bind_param('s', $what);
+    $stmt->execute();
+    if ((int) $stmt->get_result()->fetch_row()[0] === 0) {
+        return false; // not in this Wavelog version
     }
-    $prefixes = (int) $db->query('SELECT COUNT(*) FROM dxcc_prefixes')->fetch_row()[0];
-    info("DXCC data loaded ($prefixes prefixes)");
+    return (int) $db->query("SELECT COUNT(*) FROM `$what`")->fetch_row()[0] === 0;
+}
+
+// Load whatever reference data is missing. A failed download (e.g. the
+// source is unreachable) is logged, not fatal, and is retried on the next start.
+function ensure_reference_data(mysqli $db): void
+{
+    foreach (WL_REFERENCE_DATA as [$name, $check, $action]) {
+        if (!reference_data_missing($db, $check)) {
+            continue;
+        }
+        info("loading $name");
+        [$rc, $out] = run_wavelog_cli('update', $action);
+        $text = substr(preg_replace('/\s+/', ' ', trim(strip_tags($out))), 0, 200);
+        if ($rc !== 0 || reference_data_missing($db, $check)) {
+            info("WARNING: $name not loaded, will retry on next start: $text");
+            continue;
+        }
+        info("$name loaded");
+    }
+}
+
+// Switch on Wavelog cron jobs listed in cron.enableJobs, as the cron manager
+// UI does. Never disables anything; unknown ids are reported.
+function enable_cron_jobs(mysqli $db): void
+{
+    $ids = json_decode(env('WL_CRON_ENABLE_JSON', '[]'), true);
+    if (!is_array($ids)) {
+        fail('WL_CRON_ENABLE_JSON is not a JSON list');
+    }
+    foreach ($ids as $id) {
+        if (!is_string($id) || !preg_match('/^[a-z0-9_]+$/', $id)) {
+            fail('cron.enableJobs entries must be Wavelog cron job ids');
+        }
+        $find = $db->prepare('SELECT enabled FROM cron WHERE id = ?');
+        $find->bind_param('s', $id);
+        $find->execute();
+        $row = $find->get_result()->fetch_row();
+        if ($row === null) {
+            info("WARNING: cron.enableJobs: no Wavelog cron job '$id'");
+        } elseif ((int) $row[0] !== 1) {
+            $upd = $db->prepare("UPDATE cron SET enabled = 1, status = 'pending', modified = NOW() WHERE id = ?");
+            $upd->bind_param('s', $id);
+            $upd->execute();
+            info("cron job $id enabled");
+        }
+    }
 }
 
 // Key values for WL_API_KEYS_JSON entries 0..$count-1, from WL_API_KEY_<n>,
@@ -526,7 +583,8 @@ function main(): int
     $db = db();
     seed_api_keys($db);
     link_admin_identity($db);
-    ensure_dxcc($db);
+    enable_cron_jobs($db);
+    ensure_reference_data($db);
     $db->close();
     return 0;
 }

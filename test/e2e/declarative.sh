@@ -75,6 +75,20 @@ assert_eq "$expected_version" "$(e2e_sql "SELECT MAX(version) FROM migrations")"
 prefixes=$(e2e_sql "SELECT COUNT(*) FROM dxcc_prefixes")
 [[ $prefixes -gt 1000 ]] || e2e_die "DXCC data not loaded on install ($prefixes prefixes)"
 printf 'ok: DXCC data loaded (%s prefixes)\n' "$prefixes" >&2
+# Other reference data Wavelog's cron would only load on its first scheduled run.
+for t in vuccgrids lotw_users sota_directory wwff_directory pota_directory; do
+  n=$(e2e_sql "SELECT COUNT(*) FROM $t")
+  [[ $n -gt 0 ]] || e2e_die "reference table $t empty after install"
+done
+printf 'ok: reference tables seeded\n' >&2
+updates_present() {
+  k exec "$(e2e_wavelog_pod)" -c wavelog -- sh -c \
+    'test -s /var/www/html/updates/clublog_scp.txt && test -s /var/www/html/updates/dok.txt'
+}
+updates_present || e2e_die "reference files missing from updates/"
+printf 'ok: reference files downloaded\n' >&2
+assert_eq "1 pending" "$(e2e_sql "SELECT CONCAT(enabled, ' ', status) FROM cron WHERE id='vucc_grid_file'")" \
+  "cron.enableJobs enabled vucc_grid_file"
 
 # Generated secrets survive helm upgrade.
 enc_before=$(secret_value "$E2E_FULLNAME-app" encryption-key)
@@ -88,6 +102,8 @@ login_ok "$url"
 # Restart: bootstrap is idempotent.
 e2e_restart_wavelog
 assert_eq 1 "$(e2e_sql "SELECT COUNT(*) FROM users")" "still one user after restart"
+updates_present || e2e_die "reference files lost on restart (updates/ not persisted)"
+printf 'ok: reference files survived the restart\n' >&2
 url=$(e2e_url)
 login_ok "$url"
 

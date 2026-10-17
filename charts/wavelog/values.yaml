@@ -19,6 +19,10 @@ php:
 cron:
   # false sets DISABLE_CRON=true
   enabled: true
+  # Wavelog cron jobs to switch on that are off by default (ids from its cron
+  # manager), e.g. [vucc_grid_file] to refresh VUCC grids monthly. Jobs are
+  # only ever enabled here, never disabled.
+  enableJobs: []
 
 install:
   # declarative: the bootstrap init container renders config and installs the

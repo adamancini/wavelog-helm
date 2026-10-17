@@ -92,6 +92,7 @@ tests:
             - {name: data, mountPath: /var/www/html/userdata, subPath: userdata}
             - {name: data, mountPath: /var/www/html/backup, subPath: backup}
             - {name: data, mountPath: /var/www/html/images/eqsl_card_images, subPath: images/eqsl_card_images}
+            - {name: data, mountPath: /var/www/html/updates, subPath: updates}
             - {name: cache, mountPath: /var/www/html/application/cache, subPath: cache}
             - {name: cache, mountPath: /var/www/html/application/logs, subPath: logs}
             - {name: config, mountPath: /var/www/html/application/config/docker}

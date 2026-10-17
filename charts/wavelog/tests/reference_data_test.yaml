@@ -1,0 +1,42 @@
+suite: reference data and cron jobs
+templates:
+  - deployment.yaml
+set:
+  baseUrl: https://wavelog.example.com/
+tests:
+  - it: persists downloaded reference files (updates/) on the data volume
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[?(@.name=='wavelog')].volumeMounts
+          content: {name: data, mountPath: /var/www/html/updates, subPath: updates}
+  - it: lets bootstrap write reference files and logs where Wavelog reads them
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name=='bootstrap')].volumeMounts
+          content: {name: data, mountPath: /var/www/html/updates, subPath: updates}
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name=='bootstrap')].volumeMounts
+          content: {name: cache, mountPath: /var/www/html/application/logs, subPath: logs}
+  - it: fixes ownership of updates/ before bootstrap runs
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[?(@.name=='volume-permissions')].command[2]
+          pattern: /var/www/html/updates
+  - it: enables no extra cron jobs by default
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name=='bootstrap')].env
+          content: {name: WL_CRON_ENABLE_JSON, value: "[]"}
+  - it: passes cron.enableJobs to bootstrap
+    set:
+      cron.enableJobs: [vucc_grid_file, update_update_hamsofnote]
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name=='bootstrap')].env
+          content: {name: WL_CRON_ENABLE_JSON, value: '["vucc_grid_file","update_update_hamsofnote"]'}
+  - it: rejects cron job ids that are not plain identifiers
+    set:
+      cron.enableJobs: ["vucc_grid_file; DROP TABLE cron"]
+    asserts:
+      - failedTemplate:
+          errorMessage: "cron.enableJobs entries must be Wavelog cron job ids (lowercase letters, digits, underscores)"
