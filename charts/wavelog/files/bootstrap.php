@@ -122,7 +122,7 @@ function render_config(): void
         'callbook' => $callbook,
         'baselocator' => env('WL_LOCATOR'),
         'websiteurl' => env('WL_BASE_URL'),
-        'log_threshold' => (int) env('WL_LOG_THRESHOLD', '0'),
+        'log_threshold' => (int) env('WL_LOG_THRESHOLD', '1'),
         'encryptionkey' => $key,
         'qrzcall_token' => ($callbook === 'qrzcall') ? env('WL_QRZCALL_TOKEN') : '',
     ];

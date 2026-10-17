@@ -243,6 +243,29 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
         {{- end }}
+        {{- if .Values.logSidecar.enabled }}
+        - name: logs
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [bash, -c]
+          args:
+            - {{ .Files.Get "files/log-tail.sh" | toJson }}
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 33
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          {{- with .Values.logSidecar.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: cache
+              mountPath: /var/www/html/application/logs
+              subPath: logs
+        {{- end }}
       volumes:
         - name: data
           {{- if .Values.persistence.enabled }}

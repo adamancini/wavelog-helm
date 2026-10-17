@@ -86,6 +86,19 @@ assert_eq 1 "$(e2e_sql "SELECT COUNT(*) FROM users")" "still one user after rest
 url=$(e2e_url)
 login_ok "$url"
 
+# Application log: a line written to today's log file (as Wavelog's Apache
+# user would) must reach the logs sidecar's stdout.
+probe="ERROR - e2e-log-probe-$RANDOM"
+k exec "$(e2e_wavelog_pod)" -c wavelog -- su -s /bin/sh www-data -c \
+  "echo '$probe' >> /var/www/html/application/logs/log-\$(date -u +%F).php"
+for _ in $(seq 1 20); do
+  k logs "$(e2e_wavelog_pod)" -c logs 2>/dev/null | grep -qF "$probe" && break
+  sleep 1
+done
+k logs "$(e2e_wavelog_pod)" -c logs 2>/dev/null | grep -qF "$probe" ||
+  e2e_die "logs sidecar did not stream '$probe'"
+printf 'ok: application log streamed to the logs container\n' >&2
+
 # Partial install: bootstrap must refuse and leave the database alone.
 tables_before=$(e2e_sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()")
 e2e_sql "SET FOREIGN_KEY_CHECKS=0; DROP TABLE users"

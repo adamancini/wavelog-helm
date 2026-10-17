@@ -325,6 +325,20 @@ For a specific dump, run
 With an external database use `externalDatabase.host`, username and database, and the password
 from its Secret.
 
+## Logs
+
+Wavelog writes its application log (one file per UTC day) inside the pod.
+The `logs` sidecar streams it to stdout, so errors, including the reason an
+SSO login was rejected, show up in your log collector and in:
+
+```console
+kubectl logs deploy/<fullname> -c logs
+```
+
+`config.logThreshold` sets what is recorded: `1` (errors) by default; raise it
+to `2` while debugging. The bootstrap step logs to the `bootstrap` init
+container (`kubectl logs <pod> -c bootstrap`).
+
 ## Manual wizard check
 
 With `install.mode=wizard`:
@@ -368,7 +382,7 @@ With `install.mode=wizard`:
 | `install.admin.passwordKey` | `admin-password` |  |
 | `config.locator` | `AA00aa` |  |
 | `config.callbook` | `hamqth` | hamqth \| qrz \| qrzcq \| qrzru \| qrzcall |
-| `config.logThreshold` | `0` |  |
+| `config.logThreshold` | `1` | 0 = off, 1 = errors (incl. PHP), 2 = debug, 3 = info, 4 = all. |
 | `config.existingSecret` | `""` | Existing Secret with keys: encryption-key and, optionally, callbook-username, callbook-password, qrzcall-token. |
 | `config.extra` | `{}` | Extra $config[key] = value entries; any scalar, list or map. |
 | `apiKeys` | `[]` | Declarative API keys (install.mode=declarative). Upserted by key value on every start; keys not listed here are never deleted. Each entry: description: free text rights: r \| rw user: Wavelog user name (default: the install admin) existingSecret / secretKey: Secret holding the key (secretKey defaults to api-key) |
@@ -412,6 +426,8 @@ With `install.mode=wizard`:
 | `externalDatabase.username` | `wavelog` |  |
 | `externalDatabase.existingSecret` | `""` |  |
 | `externalDatabase.passwordKey` | `mariadb-password` |  |
+| `logSidecar.enabled` | `true` | Stream Wavelog's application log to the stdout of a `logs` container. |
+| `logSidecar.resources` | `{}` |  |
 | `persistence.enabled` | `true` |  |
 | `persistence.storageClass` | `""` |  |
 | `persistence.size` | `5Gi` |  |

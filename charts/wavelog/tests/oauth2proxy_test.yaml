@@ -72,10 +72,10 @@ tests:
     asserts:
       - lengthEqual: {path: spec.ports, count: 1}
       - equal: {path: "spec.ports[0].targetPort", value: proxy}
-  - it: has no sidecar and targets http when disabled
+  - it: has no proxy container and targets http when disabled
     set: {oauth2Proxy.enabled: false}
     asserts:
-      - lengthEqual: {path: spec.template.spec.containers, count: 1}
+      - notExists: {path: "spec.template.spec.containers[?(@.name=='oauth2-proxy')]"}
         template: deployment.yaml
       - equal: {path: "spec.ports[0].targetPort", value: http}
         template: service.yaml

@@ -46,7 +46,8 @@ config:
   locator: AA00aa
   # hamqth | qrz | qrzcq | qrzru | qrzcall
   callbook: hamqth
-  logThreshold: 0
+  # 0 = off, 1 = errors (incl. PHP), 2 = debug, 3 = info, 4 = all
+  logThreshold: 1
   # Existing Secret with keys: encryption-key and, optionally,
   # callbook-username, callbook-password, qrzcall-token.
   existingSecret: ""
@@ -137,6 +138,13 @@ externalDatabase:
   username: wavelog
   existingSecret: ""
   passwordKey: mariadb-password
+
+# Stream Wavelog's application log (application/logs, one file per UTC day)
+# to the stdout of a `logs` container, so it shows in `kubectl logs -c logs`
+# and log collectors. Without it the log only exists inside the pod.
+logSidecar:
+  enabled: true
+  resources: {}
 
 persistence:
   enabled: true

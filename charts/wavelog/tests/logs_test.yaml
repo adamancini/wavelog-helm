@@ -1,0 +1,55 @@
+suite: application log streaming
+templates:
+  - deployment.yaml
+set:
+  baseUrl: https://wavelog.example.com/
+tests:
+  - it: records errors by default
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name=='bootstrap')].env
+          content: {name: WL_LOG_THRESHOLD, value: "1"}
+  - it: streams the application log from a logs sidecar by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='logs')].image
+          value: ghcr.io/wavelog/wavelog:3.2.4
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='logs')].command
+          value: [bash, -c]
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='logs')].args[0]
+          pattern: tail -n \+1 -F
+      - contains:
+          path: spec.template.spec.containers[?(@.name=='logs')].volumeMounts
+          content: {name: cache, mountPath: /var/www/html/application/logs, subPath: logs}
+  - it: runs the logs sidecar unprivileged with a read-only root filesystem
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='logs')].securityContext
+          value:
+            runAsUser: 999
+            runAsGroup: 33
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+  - it: applies logs sidecar resources
+    set:
+      logSidecar.resources: {limits: {memory: 32Mi}}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='logs')].resources
+          value: {limits: {memory: 32Mi}}
+  - it: omits the logs sidecar when disabled
+    set:
+      logSidecar.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='logs')]
+  - it: streams logs in wizard mode too
+    set:
+      install.mode: wizard
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[?(@.name=='logs')]

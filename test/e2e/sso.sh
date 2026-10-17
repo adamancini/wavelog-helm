@@ -100,6 +100,14 @@ location=$(sso_login "$url" "$(mint token "$KEYS/other.pem" "$ISS" "$SUB")")
 code=$(curl -s -o /dev/null -w '%{http_code}' -c "$E2E_TMP/cookies" -b "$E2E_TMP/cookies" "$url/index.php/dashboard")
 [[ $code != 200 ]] || e2e_die "dashboard served after a forged token"
 printf 'ok: token signed by another key rejected\n' >&2
+# Wavelog records why (level 1, the chart default) and the logs sidecar streams it.
+for _ in $(seq 1 20); do
+  k logs "$(e2e_wavelog_pod)" -c logs 2>/dev/null | grep -q "SSO Authentication: JWT decode/verify failed" && break
+  sleep 1
+done
+k logs "$(e2e_wavelog_pod)" -c logs 2>/dev/null | grep -q "SSO Authentication: JWT decode/verify failed" ||
+  e2e_die "forged-token rejection reason not in the logs container"
+printf 'ok: SSO failure reason streamed to the logs container\n' >&2
 assert_eq 1 "$(user_count)" "forged token created no user"
 
 # Restart: the link is re-applied unchanged.
