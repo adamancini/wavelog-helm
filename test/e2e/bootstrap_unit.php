@@ -103,6 +103,20 @@ check($config['auth_header_clubstation_direct'] === [], 'untouched sample keys k
 check(preg_match_all("/^\\\$config\\['auth_header_jwks_uri'\\]/m", file_get_contents("$dir/sso.php")) === 1, 'jwks uri assigned once');
 unlink("$dir/sso.php");
 
+// Without an extra claim map, the sample's name claims stay but become editable:
+// Wavelog requires both names to save the account form.
+[$rc, , $err] = run_in_child('render_sso();', ['WL_CONFIG_DIR' => $dir, 'WL_SSO_JSON' => '{"jwksUri":"http://idp.example.com/jwks.json"}']);
+check($rc === 0, "render_sso succeeds without extra $err");
+$claims = load_config("$dir/sso.php")['auth_headers_claim_config'];
+foreach (['user_firstname' => 'given_name', 'user_lastname' => 'family_name'] as $field => $claim) {
+    check(
+        $claims[$field] === ['claim' => $claim, 'override_on_update' => true, 'allow_manual_change' => true],
+        "$field keeps claim $claim and is editable"
+    );
+}
+check($claims['user_callsign']['allow_manual_change'] === false, 'other sample claims stay locked');
+unlink("$dir/sso.php");
+
 [$rc, , $err] = run_in_child('render_sso();', ['WL_CONFIG_DIR' => $dir, 'WL_SSO_JSON' => '{"jwksUri":""}']);
 check($rc !== 0 && str_contains($err, 'bootstrap: auth.header.jwksUri is required when auth.mode=header'), 'render_sso requires jwksUri');
 foreach (['auth_header_jwks_uri', 'auth_header_create'] as $mappedKey) {
