@@ -315,35 +315,66 @@ function install_schema(): void
 // `php index.php migrate` (CI_ENV=docker selects the rendered config). It
 // prints {"status":"success","version":N}. Verified against Wavelog 3.2.4; the
 // php -S fallback was not needed.
-function run_migrations(): void
+// Run a Wavelog controller from the command line (php index.php <segments>).
+// Returns [exit code, combined output].
+function run_wavelog_cli(string ...$segments): array
 {
     $env = getenv();
     $env['CI_ENV'] = 'docker';
     $proc = proc_open(
-        [
-            'php',
-            // CI_ENV must reach getenv()/$_SERVER whatever php.ini says.
-            '-d', 'variables_order=EGPCS',
-            '-d', 'memory_limit=' . ini_get('memory_limit'),
-            '-d', 'max_execution_time=' . ini_get('max_execution_time'),
-            WL_APP_DIR . '/index.php', 'migrate',
-        ],
+        array_merge(
+            [
+                'php',
+                // CI_ENV must reach getenv()/$_SERVER whatever php.ini says.
+                '-d', 'variables_order=EGPCS',
+                '-d', 'memory_limit=' . ini_get('memory_limit'),
+                '-d', 'max_execution_time=' . ini_get('max_execution_time'),
+                WL_APP_DIR . '/index.php',
+            ],
+            $segments
+        ),
         [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]],
         $pipes,
         WL_APP_DIR,
         $env
     );
     if (!is_resource($proc)) {
-        fail('cannot start migrations');
+        fail('cannot start php index.php ' . implode(' ', $segments));
     }
     $out = stream_get_contents($pipes[1]);
     fclose($pipes[1]);
-    $rc = proc_close($proc);
+    return [proc_close($proc), $out];
+}
+
+function run_migrations(): void
+{
+    [$rc, $out] = run_wavelog_cli('migrate');
     if ($rc !== 0 || !preg_match('/"status"\s*:\s*"success"/', $out)) {
         fail("migrations failed (exit $rc): " . substr(trim(strip_tags($out)), 0, 500));
     }
     $v = preg_match('/"version"\s*:\s*"?(\d+)/', $out, $m) ? $m[1] : '?';
     info("migrations at version $v");
+}
+
+// Load DXCC entities/prefixes/exceptions (the wizard's last step) when they
+// are missing: without them station DXCC can't be chosen and callsigns aren't
+// resolved to countries. Wavelog's own cron only refreshes every two months.
+// A failed download (e.g. Club Log unreachable) is logged, not fatal, and is
+// retried on the next start.
+function ensure_dxcc(mysqli $db): void
+{
+    $prefixes = (int) $db->query('SELECT COUNT(*) FROM dxcc_prefixes')->fetch_row()[0];
+    if ($prefixes > 0) {
+        return;
+    }
+    info('loading DXCC data');
+    [$rc, $out] = run_wavelog_cli('update', 'dxcc');
+    if ($rc !== 0 || !preg_match('/\bsuccess\b/', $out)) {
+        info('WARNING: DXCC data not loaded, will retry on next start: ' . substr(trim(strip_tags($out)), 0, 300));
+        return;
+    }
+    $prefixes = (int) $db->query('SELECT COUNT(*) FROM dxcc_prefixes')->fetch_row()[0];
+    info("DXCC data loaded ($prefixes prefixes)");
 }
 
 // Key values for WL_API_KEYS_JSON entries 0..$count-1, from WL_API_KEY_<n>,
@@ -483,6 +514,7 @@ function main(): int
     $db = db();
     seed_api_keys($db);
     link_admin_identity($db);
+    ensure_dxcc($db);
     $db->close();
     return 0;
 }

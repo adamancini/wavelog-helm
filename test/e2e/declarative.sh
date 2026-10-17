@@ -70,6 +70,11 @@ login_ok "$url"
 expected_version=$(k exec "$pod" -c wavelog -- php -r \
   'define("BASEPATH", 1); define("APPPATH", ""); include "/var/www/html/application/config/migration.php"; echo $config["migration_version"];')
 assert_eq "$expected_version" "$(e2e_sql "SELECT MAX(version) FROM migrations")" "schema at migration_version"
+# The wizard's last step loads DXCC data; bootstrap must too, or station
+# DXCC can't be chosen and callsigns can't be resolved to countries.
+prefixes=$(e2e_sql "SELECT COUNT(*) FROM dxcc_prefixes")
+[[ $prefixes -gt 1000 ]] || e2e_die "DXCC data not loaded on install ($prefixes prefixes)"
+printf 'ok: DXCC data loaded (%s prefixes)\n' "$prefixes" >&2
 
 # Generated secrets survive helm upgrade.
 enc_before=$(secret_value "$E2E_FULLNAME-app" encryption-key)
