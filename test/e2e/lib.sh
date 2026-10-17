@@ -53,13 +53,13 @@ e2e_install() {
   shift
   [[ $E2E_NS == "wl-e2e-$scenario" ]] || e2e_namespace "$scenario"
   e2e_log "helm install $E2E_RELEASE into $E2E_NS"
-  h install "$E2E_RELEASE" "$E2E_CHART" --wait --timeout 10m "$@"
+  h install "$E2E_RELEASE" "$E2E_CHART" --wait --timeout 10m -f "$E2E_DIR/values-common.yaml" "$@"
 }
 
 # e2e_upgrade [helm args]: helm upgrade the scenario's release in place.
 e2e_upgrade() {
   e2e_log "helm upgrade $E2E_RELEASE in $E2E_NS"
-  h upgrade "$E2E_RELEASE" "$E2E_CHART" --wait --timeout 10m "$@"
+  h upgrade "$E2E_RELEASE" "$E2E_CHART" --wait --timeout 10m -f "$E2E_DIR/values-common.yaml" "$@"
 }
 
 e2e_uninstall() {

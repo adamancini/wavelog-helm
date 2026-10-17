@@ -115,3 +115,13 @@ tests:
     set: {install.mode: wizard, persistence.enabled: false}
     asserts:
       - failedTemplate: {errorMessage: "install.mode=wizard requires persistence.enabled=true (set persistence.existingClaim to use your own volume); the wizard config would otherwise be lost on every restart"}
+  - it: sets no hostAliases by default
+    asserts:
+      - notExists: {path: spec.template.spec.hostAliases}
+  - it: passes hostAliases through to the pod
+    set:
+      hostAliases: [{ip: 127.0.0.1, hostnames: [pota-map.info]}]
+    asserts:
+      - equal:
+          path: spec.template.spec.hostAliases
+          value: [{ip: 127.0.0.1, hostnames: [pota-map.info]}]

@@ -468,6 +468,7 @@ With `install.mode=wizard`:
 | `nodeSelector` | `{}` |  |
 | `tolerations` | `[]` |  |
 | `affinity` | `{}` |  |
+| `hostAliases` | `[]` | Extra /etc/hosts entries for the Wavelog pod ({ip, hostnames} list). |
 
 ## Testing
 
