@@ -1,0 +1,8 @@
+# Applied to every scenario before its own values.
+# Wavelog's migration 292 downloads ~150 MB of POTA park boundaries from
+# pota-map.info during install; when that host is slow the install outlives
+# helm's timeout. Point it at localhost so each download fails at once;
+# Wavelog logs the failure and leaves the boundaries to its monthly cron.
+hostAliases:
+  - ip: 127.0.0.1
+    hostnames: [pota-map.info]

@@ -209,3 +209,5 @@ resources: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+# Extra /etc/hosts entries for the Wavelog pod ({ip, hostnames} list).
+hostAliases: []
