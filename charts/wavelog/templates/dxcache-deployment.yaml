@@ -1,8 +1,8 @@
 {{- if .Values.dxcache.enabled }}
 {{- $d := .Values.dxcache }}
 {{- $image := printf "%s:%s" $d.image.repository (toString $d.image.tag) }}
-{{- $podSC := merge (deepCopy ($d.podSecurityContext | default dict)) (dict "runAsNonRoot" true "runAsUser" 1000 "runAsGroup" 1000 "fsGroup" 1000) }}
-{{- $ctrSC := merge (deepCopy ($d.securityContext | default dict)) (dict "allowPrivilegeEscalation" false "readOnlyRootFilesystem" true "capabilities" (dict "drop" (list "ALL"))) }}
+{{- $podSC := mustMergeOverwrite (dict "runAsNonRoot" true "runAsUser" 1000 "runAsGroup" 1000 "fsGroup" 1000) (deepCopy ($d.podSecurityContext | default dict)) }}
+{{- $ctrSC := mustMergeOverwrite (dict "allowPrivilegeEscalation" false "readOnlyRootFilesystem" true "capabilities" (dict "drop" (list "ALL"))) (deepCopy ($d.securityContext | default dict)) }}
 {{- $clustersSecret := $d.existingClustersSecret | default (include "wavelog.dxcache.fullname" .) }}
 {{- $checksum := "" }}
 {{- if $d.existingClustersSecret }}

@@ -260,6 +260,19 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[33]
           value: {name: LIVE_PAGE_ENABLED, value: "true"}
+      - lengthEqual: {path: "spec.template.spec.containers[0].env", count: 34}
+  - it: keeps false and zero overrides in security contexts
+    template: dxcache-deployment.yaml
+    set:
+      dxcache:
+        securityContext: {readOnlyRootFilesystem: false}
+        podSecurityContext: {runAsNonRoot: false, runAsUser: 0}
+    asserts:
+      - equal: {path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: false}
+      - equal: {path: "spec.template.spec.securityContext.runAsUser", value: 0}
+      - equal: {path: "spec.template.spec.securityContext.runAsNonRoot", value: false}
+      - equal: {path: "spec.template.spec.containers[0].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.securityContext.fsGroup", value: 1000}
   - it: mounts the existing claim
     template: dxcache-deployment.yaml
     set:
