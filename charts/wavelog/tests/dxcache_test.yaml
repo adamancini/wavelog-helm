@@ -53,3 +53,72 @@ tests:
       dxcache: {enabled: true, existingClustersSecret: s}
     asserts:
       - notFailedTemplate: {}
+  - it: accepts a cluster with its own call and no default callsign
+    set:
+      dxcache:
+        enabled: true
+        callsign: ""
+        clusters: [{name: A, host: a.example, port: 7300, call: N0CALL-8}]
+    asserts:
+      - notFailedTemplate: {}
+---
+suite: dxcache clusters secret
+templates:
+  - dxcache-secret.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+tests:
+  - it: renders nothing when disabled
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: renders nothing with existingClustersSecret
+    set:
+      dxcache: {enabled: true, existingClustersSecret: s}
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: builds CLUSTERS with defaults
+    set:
+      dxcache:
+        enabled: true
+        callsign: N0CALL-7
+        clusters:
+          - {name: DM3KS, host: dm3ks.de, port: 7300}
+          - {host: dxspots.com, port: 7300, call: N0CALL-8, customCommand: set/skimmer}
+    asserts:
+      - isKind: {of: Secret}
+      - equal:
+          path: data["clusters-json"]
+          decodeBase64: true
+          value: '[{"call":"N0CALL-7","cluster":"DM3KS","host":"dm3ks.de","loginPrompt":"login:","password":"","port":7300},{"call":"N0CALL-8","cluster":"dxspots.com","customCommand":"set/skimmer","host":"dxspots.com","loginPrompt":"login:","password":"","port":7300}]'
+  - it: reads and trims a password from a Secret
+    kubernetesProvider:
+      scheme:
+        "v1/Secret":
+          gvr: {version: v1, resource: secrets}
+          namespaced: true
+      objects:
+        - apiVersion: v1
+          kind: Secret
+          metadata: {name: pw, namespace: NAMESPACE}
+          data: {password: "c2VjcmV0Cg=="}
+    set:
+      dxcache:
+        enabled: true
+        callsign: N0CALL-7
+        clusters: [{name: A, host: a.example, port: 7300, existingSecret: pw}]
+    asserts:
+      - matchRegex:
+          path: data["clusters-json"]
+          decodeBase64: true
+          pattern: '"password":"secret"'
+  - it: fails when the password Secret is missing
+    set:
+      dxcache:
+        enabled: true
+        callsign: N0CALL-7
+        clusters: [{name: A, host: a.example, port: 7300, existingSecret: nope}]
+    asserts:
+      - failedTemplate:
+          errorPattern: "dxcache.clusters\\[0\\]: Secret nope key password not found"
