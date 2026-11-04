@@ -139,6 +139,15 @@ spec:
                 secretKeyRef: {name: {{ $k.existingSecret | toJson }}, key: {{ $k.secretKey | default "api-key" | toJson }}}
             {{- end }}
             - {name: WL_API_KEYS_JSON, value: {{ toJson $keys | toJson }}}
+            - {name: WL_DXCACHE_URL, value: {{ ternary (include "wavelog.dxcache.url" .) "" .Values.dxcache.enabled | toJson }}}
+            - {name: WL_DXCACHE_URL_PREFIX, value: {{ include "wavelog.dxcache.urlPrefix" . | toJson }}}
+            {{- if .Values.dxcache.enabled }}
+            - name: WL_DXCACHE_API_KEY
+              valueFrom:
+                secretKeyRef: {name: {{ printf "%s-app" (include "wavelog.fullname" .) | toJson }}, key: dxcache-api-key}
+            {{- else }}
+            - {name: WL_DXCACHE_API_KEY, value: ""}
+            {{- end }}
           volumeMounts:
             {{- include "wavelog.volumeMounts" . | nindent 12 }}
             {{- include "wavelog.configMount" . | nindent 12 }}

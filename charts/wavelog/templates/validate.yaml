@@ -1,3 +1,4 @@
+{{- include "wavelog.dxcache.validate" . -}}
 {{- /* Fail fast on invalid database settings; renders no manifest. */ -}}
 {{- $_ := include "wavelog.db.host" . -}}
 {{- if not .Values.mariadb.enabled -}}

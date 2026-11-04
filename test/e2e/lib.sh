@@ -88,6 +88,21 @@ e2e_url() {
   echo "http://127.0.0.1:$port"
 }
 
+# e2e_login <url> <password> <cookie-jar>: log in as admin, leaving the session
+# in <cookie-jar>, and check the dashboard is reachable.
+e2e_login() {
+  local url=$1 password=$2 jar=$3 location code
+  rm -f "$jar"
+  curl -s -o /dev/null -c "$jar" -b "$jar" "$url/index.php/user/login"
+  location=$(curl -s -o /dev/null -w '%{redirect_url}' -c "$jar" -b "$jar" \
+    --data-urlencode "user_name=admin" \
+    --data-urlencode "user_password=$password" \
+    "$url/index.php/user/login")
+  [[ $location == */dashboard ]] || e2e_die "login POST redirected to '$location', not the dashboard"
+  code=$(curl -s -o /dev/null -w '%{http_code}' -c "$jar" -b "$jar" "$url/index.php/dashboard")
+  assert_eq 200 "$code" "dashboard after login"
+}
+
 e2e_wavelog_pod() {
   k get pod -l app.kubernetes.io/instance="$E2E_RELEASE",app.kubernetes.io/component=wavelog \
     -o jsonpath='{.items[0].metadata.name}'

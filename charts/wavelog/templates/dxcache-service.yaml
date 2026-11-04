@@ -1,0 +1,18 @@
+{{- if .Values.dxcache.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wavelog.dxcache.fullname" . }}
+  labels:
+    {{- include "wavelog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dxcache
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "wavelog.dxcache.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -14,20 +14,6 @@ secret_value() { k get secret "$1" -o go-template="{{index .data \"$2\"}}" | bas
 
 key_count() { e2e_sql "SELECT COUNT(*) FROM api WHERE \`key\`='$1'"; }
 
-# login_ok <url> <password>: the admin can log in and reach the dashboard.
-login_ok() {
-  local url=$1 password=$2 jar="$E2E_TMP/cookies" location code
-  rm -f "$jar"
-  curl -s -o /dev/null -c "$jar" -b "$jar" "$url/index.php/user/login"
-  location=$(curl -s -o /dev/null -w '%{redirect_url}' -c "$jar" -b "$jar" \
-    --data-urlencode "user_name=admin" \
-    --data-urlencode "user_password=$password" \
-    "$url/index.php/user/login")
-  [[ $location == */dashboard ]] || e2e_die "login POST redirected to '$location', not the dashboard"
-  code=$(curl -s -o /dev/null -w '%{http_code}' -c "$jar" -b "$jar" "$url/index.php/dashboard")
-  assert_eq 200 "$code" "dashboard after login"
-}
-
 post_qso() {
   local url=$1 call=$2 body code
   body=$(printf '{"key":"%s","station_profile_id":"1","type":"adif","string":"<call:5>%s<band:3>20m<mode:3>FT8<qso_date:8>20260101<time_on:6>120000<eor>"}' "$API_KEY" "$call")
@@ -75,7 +61,7 @@ assert_eq 1 "$(key_count "$MANUAL_KEY")" "manually inserted key survives upgrade
 assert_eq "$admin_pw_before" "$(secret_value "$E2E_FULLNAME-app" admin-password)" "generated admin password unchanged by upgrade"
 assert_eq "$root_pw_before" "$(secret_value "$E2E_FULLNAME-mariadb" mariadb-root-password)" "MariaDB root password unchanged by upgrade"
 url=$(e2e_url)
-login_ok "$url" "$admin_pw_before"
+e2e_login "$url" "$admin_pw_before" "$E2E_TMP/cookies"
 post_qso "$url" K2DEF
 
 e2e_uninstall

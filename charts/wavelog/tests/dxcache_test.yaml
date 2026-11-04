@@ -1,0 +1,382 @@
+suite: dxcache
+templates:
+  - validate.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+tests:
+  - it: rejects wizard mode
+    set:
+      install: {mode: wizard}
+      dxcache:
+        enabled: true
+        clusters: [{name: A, host: a.example, port: 7300, call: N0CALL-7}]
+    asserts:
+      - failedTemplate:
+          errorMessage: "dxcache.enabled requires install.mode=declarative"
+  - it: requires a cluster
+    set:
+      dxcache: {enabled: true, clusters: []}
+    asserts:
+      - failedTemplate:
+          errorMessage: "dxcache.clusters or dxcache.existingClustersSecret is required"
+  - it: requires a callsign per cluster
+    set:
+      dxcache:
+        enabled: true
+        callsign: ""
+        clusters: [{name: A, host: a.example, port: 7300}]
+    asserts:
+      - failedTemplate:
+          errorPattern: "dxcache.clusters\\[0\\]: call or dxcache.callsign is required"
+  - it: requires host and port
+    set:
+      dxcache:
+        enabled: true
+        clusters: [{name: A, call: N0CALL-7}]
+    asserts:
+      - failedTemplate:
+          errorPattern: "dxcache.clusters\\[0\\]: host and port are required"
+  - it: requires an RBN callsign
+    set:
+      dxcache:
+        enabled: true
+        callsign: ""
+        existingClustersSecret: s
+        rbn: {enabled: true, callsign: ""}
+    asserts:
+      - failedTemplate:
+          errorMessage: "dxcache.rbn.enabled requires dxcache.rbn.callsign or dxcache.callsign"
+  - it: accepts existingClustersSecret alone
+    set:
+      dxcache: {enabled: true, existingClustersSecret: s}
+    asserts:
+      - notFailedTemplate: {}
+  - it: accepts a cluster with its own call and no default callsign
+    set:
+      dxcache:
+        enabled: true
+        callsign: ""
+        clusters: [{name: A, host: a.example, port: 7300, call: N0CALL-8}]
+    asserts:
+      - notFailedTemplate: {}
+---
+suite: dxcache clusters secret
+templates:
+  - dxcache-secret.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+tests:
+  - it: renders nothing when disabled
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: renders nothing with existingClustersSecret
+    set:
+      dxcache: {enabled: true, existingClustersSecret: s}
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: builds CLUSTERS with defaults
+    set:
+      dxcache:
+        enabled: true
+        callsign: N0CALL-7
+        clusters:
+          - {name: DM3KS, host: dm3ks.de, port: 7300}
+          - {host: dxspots.com, port: 7300, call: N0CALL-8, customCommand: set/skimmer}
+    asserts:
+      - isKind: {of: Secret}
+      - equal:
+          path: data["clusters-json"]
+          decodeBase64: true
+          value: '[{"call":"N0CALL-7","cluster":"DM3KS","host":"dm3ks.de","loginPrompt":"login:","password":"","port":7300},{"call":"N0CALL-8","cluster":"dxspots.com","customCommand":"set/skimmer","host":"dxspots.com","loginPrompt":"login:","password":"","port":7300}]'
+  - it: reads and trims a password from a Secret
+    kubernetesProvider:
+      scheme:
+        "v1/Secret":
+          gvr: {version: v1, resource: secrets}
+          namespaced: true
+      objects:
+        - apiVersion: v1
+          kind: Secret
+          metadata: {name: pw, namespace: NAMESPACE}
+          data: {password: "c2VjcmV0Cg=="}
+    set:
+      dxcache:
+        enabled: true
+        callsign: N0CALL-7
+        clusters: [{name: A, host: a.example, port: 7300, existingSecret: pw}]
+    asserts:
+      - matchRegex:
+          path: data["clusters-json"]
+          decodeBase64: true
+          pattern: '"password":"secret"'
+  - it: fails when the password Secret is missing
+    set:
+      dxcache:
+        enabled: true
+        callsign: N0CALL-7
+        clusters: [{name: A, host: a.example, port: 7300, existingSecret: nope}]
+    asserts:
+      - failedTemplate:
+          errorPattern: "dxcache.clusters\\[0\\]: Secret nope key password not found"
+---
+suite: dxcache loopback key (secret)
+templates:
+  - secret-app.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+tests:
+  - it: renders only the dxcache key when other secrets are existing
+    set:
+      config: {existingSecret: mine}
+      install: {mode: declarative, admin: {existingSecret: mine}}
+      dxcache:
+        enabled: true
+        clusters: [{name: A, host: a.example, port: 7300, call: N0CALL-7}]
+    asserts:
+      - hasDocuments: {count: 1}
+      - exists: {path: 'data["dxcache-api-key"]'}
+      - notExists: {path: 'data["encryption-key"]'}
+  - it: omits the key when disabled
+    asserts:
+      - notExists: {path: 'data["dxcache-api-key"]'}
+---
+suite: dxcache bootstrap env
+templates:
+  - deployment.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+tests:
+  - it: wires url and key when enabled
+    set:
+      config: {existingSecret: mine}
+      dxcache:
+        enabled: true
+        clusters: [{name: A, host: a.example, port: 7300, call: N0CALL-7}]
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_API_KEY, valueFrom: {secretKeyRef: {name: RELEASE-NAME-wavelog-app, key: dxcache-api-key}}}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_URL, value: "http://RELEASE-NAME-wavelog-dxcache.NAMESPACE.svc:3000"}
+  - it: passes empty url and key when disabled
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_URL, value: ""}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_API_KEY, value: ""}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_URL_PREFIX, value: "http://RELEASE-NAME-wavelog-dxcache."}
+---
+suite: dxcache disabled
+templates:
+  - dxcache-deployment.yaml
+  - dxcache-service.yaml
+  - dxcache-pvc.yaml
+  - configmap-dxcache.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+tests:
+  - it: renders nothing when disabled
+    asserts:
+      - hasDocuments: {count: 0}
+---
+suite: dxcache deployment
+templates:
+  - dxcache-deployment.yaml
+  - dxcache-secret.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+  dxcache:
+    enabled: true
+    callsign: N0CALL-7
+    clusters: [{name: A, host: a.example, port: 7300}]
+tests:
+  - it: uses Recreate and one replica
+    template: dxcache-deployment.yaml
+    asserts:
+      - equal: {path: spec.replicas, value: 1}
+      - equal: {path: spec.strategy.type, value: Recreate}
+  - it: pins the image
+    template: dxcache-deployment.yaml
+    asserts:
+      - equal: {path: "spec.template.spec.containers[0].image", value: "ghcr.io/int2001/dxclusterapi:1.5.8"}
+  - it: gates on the lookup
+    template: dxcache-deployment.yaml
+    asserts:
+      - equal: {path: "spec.template.spec.initContainers[0].name", value: wait-lookup}
+      - equal: {path: "spec.template.spec.initContainers[0].command", value: [bun, run, /wait/wait-lookup.js]}
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content: {name: WAVELOG_URL, value: "http://RELEASE-NAME-wavelog.NAMESPACE.svc:80/index.php/api/lookup"}
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content: {name: WAVELOG_KEY, valueFrom: {secretKeyRef: {name: RELEASE-NAME-wavelog-app, key: dxcache-api-key}}}
+  - it: wires WAVELOG_URL through the Service port
+    template: dxcache-deployment.yaml
+    set:
+      service: {port: 8080}
+      auth:
+        mode: header
+        header:
+          jwksUri: https://idp.example.com/realms/example/protocol/openid-connect/certs
+      oauth2Proxy:
+        enabled: true
+        issuerUrl: https://idp.example.com/realms/example
+        existingSecret: wavelog-oauth2-proxy
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: WAVELOG_URL, value: "http://RELEASE-NAME-wavelog.NAMESPACE.svc:8080/index.php/api/lookup"}
+  - it: reads CLUSTERS from existingClustersSecret
+    template: dxcache-deployment.yaml
+    set:
+      dxcache: {existingClustersSecret: s}
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CLUSTERS, valueFrom: {secretKeyRef: {name: s, key: clusters-json}}}
+  - it: lets extraEnv override
+    template: dxcache-deployment.yaml
+    set:
+      dxcache:
+        extraEnv: [{name: LIVE_PAGE_ENABLED, value: "true"}]
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: LIVE_PAGE_ENABLED, value: "true"}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: LIVE_PAGE_ENABLED, value: "false"}
+      - lengthEqual: {path: "spec.template.spec.containers[0].env", count: 33}
+  - it: does not mount the service account token
+    template: dxcache-deployment.yaml
+    asserts:
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - exists: {path: 'spec.template.metadata.annotations["checksum/wait"]'}
+  - it: keeps false and zero overrides in security contexts
+    template: dxcache-deployment.yaml
+    set:
+      dxcache:
+        securityContext: {readOnlyRootFilesystem: false}
+        podSecurityContext: {runAsNonRoot: false, runAsUser: 0}
+    asserts:
+      - equal: {path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: false}
+      - equal: {path: "spec.template.spec.securityContext.runAsUser", value: 0}
+      - equal: {path: "spec.template.spec.securityContext.runAsNonRoot", value: false}
+      - equal: {path: "spec.template.spec.containers[0].securityContext.capabilities.drop", value: [ALL]}
+      - equal: {path: "spec.template.spec.securityContext.fsGroup", value: 1000}
+  - it: mounts the existing claim
+    template: dxcache-deployment.yaml
+    set:
+      dxcache: {persistence: {existingClaim: c}}
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content: {name: data, persistentVolumeClaim: {claimName: c}}
+---
+suite: dxcache pvc
+templates:
+  - dxcache-pvc.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+  dxcache:
+    enabled: true
+    callsign: N0CALL-7
+    clusters: [{name: A, host: a.example, port: 7300}]
+tests:
+  - it: renders a kept claim
+    asserts:
+      - equal: {path: metadata.name, value: RELEASE-NAME-wavelog-dxcache}
+      - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
+  - it: renders nothing with an existing claim
+    set:
+      dxcache: {persistence: {existingClaim: c}}
+    asserts:
+      - hasDocuments: {count: 0}
+---
+suite: dxcache names
+templates:
+  - dxcache-service.yaml
+  - deployment.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+  fullnameOverride: logbook
+  dxcache:
+    enabled: true
+    callsign: N0CALL-7
+    clusters: [{name: A, host: a.example, port: 7300}]
+tests:
+  - it: follows fullnameOverride
+    asserts:
+      - equal: {path: metadata.name, value: logbook-dxcache}
+        template: dxcache-service.yaml
+      - equal: {path: "spec.ports[0].port", value: 3000}
+        template: dxcache-service.yaml
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_URL, value: "http://logbook-dxcache.NAMESPACE.svc:3000"}
+        template: deployment.yaml
+---
+suite: dxcache networkpolicy
+templates:
+  - networkpolicy.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+  networkPolicy: {enabled: true}
+  dxcache:
+    enabled: true
+    callsign: N0CALL-7
+    clusters: [{name: A, host: a.example, port: 7300}]
+tests:
+  - it: adds a DXCache NetworkPolicy
+    asserts:
+      - hasDocuments: {count: 3}
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: dxcache
+        documentIndex: 2
+      - equal: {path: "spec.ingress[0].ports[0].port", value: 3000}
+        documentIndex: 2
+---
+suite: dxcache lookup gate script
+templates:
+  - configmap-dxcache.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+  dxcache:
+    enabled: true
+    callsign: N0CALL-7
+    clusters: [{name: A, host: a.example, port: 7300}]
+tests:
+  - it: probes with the N0CALL placeholder, not a real callsign
+    asserts:
+      - matchRegex: {path: 'data["wait-lookup.js"]', pattern: 'callsign: "N0CALL"'}
+      - notMatchRegex: {path: 'data["wait-lookup.js"]', pattern: 'DL1AA'}
+  - it: logs the error message and the response status with a body excerpt
+    asserts:
+      - matchRegex: {path: 'data["wait-lookup.js"]', pattern: 'e\.message'}
+      - matchRegex: {path: 'data["wait-lookup.js"]', pattern: 'status \$\{res\.status\}: \$\{excerpt\(text\)\}'}

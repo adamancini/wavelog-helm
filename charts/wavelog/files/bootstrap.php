@@ -469,6 +469,36 @@ function api_keys_from_env(int $count): array
     return $keys;
 }
 
+// user_id of the named user; fails when there is none.
+function admin_user_id(mysqli $db, string $user, string $ctx = 'apiKeys'): int
+{
+    $find = $db->prepare('SELECT user_id FROM users WHERE user_name = ?');
+    $find->bind_param('s', $user);
+    $find->execute();
+    $row = $find->get_result()->fetch_row();
+    if (!$row) {
+        fail("$ctx user $user not found");
+    }
+    return (int) $row[0];
+}
+
+// Insert or update one API key row, matched by key value.
+function upsert_api_key(mysqli $db, string $key, string $rights, string $desc, int $uid): void
+{
+    $exists = $db->prepare('SELECT COUNT(*) FROM api WHERE `key` = ?');
+    $exists->bind_param('s', $key);
+    $exists->execute();
+    if ((int) $exists->get_result()->fetch_row()[0] > 0) {
+        $update = $db->prepare("UPDATE api SET rights = ?, status = 'active', description = ?, user_id = ? WHERE `key` = ?");
+        $update->bind_param('ssis', $rights, $desc, $uid, $key);
+        $update->execute();
+    } else {
+        $insert = $db->prepare("INSERT INTO api (`key`, rights, status, description, user_id, created_by) VALUES (?, ?, 'active', ?, ?, ?)");
+        $insert->bind_param('sssii', $key, $rights, $desc, $uid, $uid);
+        $insert->execute();
+    }
+}
+
 // Upsert API keys by key value. Never deletes: keys absent from values stay.
 // WL_API_KEYS_JSON is [{description, rights, user}]; the key for entry n is in
 // WL_API_KEY_<n>. An empty user means the install admin.
@@ -478,10 +508,6 @@ function seed_api_keys(mysqli $db): void
     if (!is_array($entries)) {
         fail('WL_API_KEYS_JSON must be a JSON array');
     }
-    $find = $db->prepare('SELECT user_id FROM users WHERE user_name = ?');
-    $exists = $db->prepare('SELECT COUNT(*) FROM api WHERE `key` = ?');
-    $update = $db->prepare("UPDATE api SET rights = ?, status = 'active', description = ?, user_id = ? WHERE `key` = ?");
-    $insert = $db->prepare("INSERT INTO api (`key`, rights, status, description, user_id, created_by) VALUES (?, ?, 'active', ?, ?, ?)");
     $entries = array_values($entries);
     $keys = api_keys_from_env(count($entries));
     foreach ($entries as $n => $entry) {
@@ -494,26 +520,42 @@ function seed_api_keys(mysqli $db): void
         if ($user === '') {
             $user = env('WL_ADMIN_USERNAME');
         }
-        $find->bind_param('s', $user);
-        $find->execute();
-        $row = $find->get_result()->fetch_row();
-        if (!$row) {
-            fail("apiKeys user $user not found");
-        }
-        $uid = (int) $row[0];
+        $uid = admin_user_id($db, $user);
         $desc = (string) ($entry['description'] ?? '');
-
-        $exists->bind_param('s', $key);
-        $exists->execute();
-        if ((int) $exists->get_result()->fetch_row()[0] > 0) {
-            $update->bind_param('ssis', $rights, $desc, $uid, $key);
-            $update->execute();
-        } else {
-            $insert->bind_param('sssii', $key, $rights, $desc, $uid, $uid);
-            $insert->execute();
-        }
+        upsert_api_key($db, $key, $rights, $desc, $uid);
     }
     info('api keys seeded: ' . count($entries));
+}
+
+// True when $current is a URL this chart wrote: it starts with the chart's own
+// DXCache prefix. A URL the operator set by hand is never owned.
+function dxcache_url_owned(string $current, string $prefix): bool
+{
+    return $prefix !== '' && str_starts_with($current, $prefix);
+}
+
+// Point Wavelog at the chart's DXCache (with a loopback read key), or clear
+// dxcache_url on disable, but only when the chart set it.
+function configure_dxcache(mysqli $db): void
+{
+    $url = env('WL_DXCACHE_URL');
+    if ($url !== '') {
+        $key = trim(env('WL_DXCACHE_API_KEY'));
+        if ($key === '') {
+            fail('dxcache: WL_DXCACHE_API_KEY is empty');
+        }
+        upsert_api_key($db, $key, 'r', 'DXCache (managed by chart)', admin_user_id($db, env('WL_ADMIN_USERNAME'), 'dxcache'));
+        $opt = $db->prepare("INSERT INTO options (option_name, option_value) VALUES ('dxcache_url', ?) ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)");
+        $opt->bind_param('s', $url);
+        $opt->execute();
+        info('dxcache wired: ' . $url);
+        return;
+    }
+    $cur = $db->query("SELECT option_value FROM options WHERE option_name = 'dxcache_url'")->fetch_row();
+    if ($cur && dxcache_url_owned((string) $cur[0], env('WL_DXCACHE_URL_PREFIX'))) {
+        $db->query("UPDATE options SET option_value = '' WHERE option_name = 'dxcache_url'");
+        info('dxcache_url cleared');
+    }
 }
 
 // Link the install admin to an IdP identity so header login lands on it.
@@ -582,6 +624,7 @@ function main(): int
     // seed on a fresh connection.
     $db = db();
     seed_api_keys($db);
+    configure_dxcache($db);
     link_admin_identity($db);
     enable_cron_jobs($db);
     ensure_reference_data($db);

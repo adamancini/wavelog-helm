@@ -142,4 +142,12 @@ check($rc === 0, '255-character api key accepted');
 [$rc, , $err] = run_in_child('api_keys_from_env(2);', ['WL_API_KEY_0' => 'same', 'WL_API_KEY_1' => "same\n"]);
 check($rc !== 0 && str_contains($err, 'bootstrap: apiKeys[1]: same key as apiKeys[0]'), 'duplicate api key fails');
 
+// dxcache_url_owned: only a URL under the chart's own prefix is the chart's.
+$pfx = 'http://wl-wavelog-dxcache.';
+check(dxcache_url_owned('http://wl-wavelog-dxcache.ns.svc:3000', $pfx), 'chart URL is owned');
+check(!dxcache_url_owned('https://dxc.example.org/dxcache', $pfx), 'foreign URL not owned');
+check(!dxcache_url_owned('', $pfx), 'empty URL not owned');
+check(!dxcache_url_owned('http://wl-wavelog-dxcache.ns.svc:3000', ''), 'empty prefix owns nothing');
+check(!dxcache_url_owned('http://wl-wavelog-dxcache-old.ns.svc:3000', $pfx), 'similar name not owned');
+
 exit($failures === 0 ? 0 : 1);
