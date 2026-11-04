@@ -122,3 +122,59 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "dxcache.clusters\\[0\\]: Secret nope key password not found"
+---
+suite: dxcache loopback key (secret)
+templates:
+  - secret-app.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+tests:
+  - it: renders only the dxcache key when other secrets are existing
+    set:
+      config: {existingSecret: mine}
+      install: {mode: declarative, admin: {existingSecret: mine}}
+      dxcache:
+        enabled: true
+        clusters: [{name: A, host: a.example, port: 7300, call: N0CALL-7}]
+    asserts:
+      - hasDocuments: {count: 1}
+      - exists: {path: 'data["dxcache-api-key"]'}
+      - notExists: {path: 'data["encryption-key"]'}
+  - it: omits the key when disabled
+    asserts:
+      - notExists: {path: 'data["dxcache-api-key"]'}
+---
+suite: dxcache bootstrap env
+templates:
+  - deployment.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+tests:
+  - it: wires url and key when enabled
+    set:
+      config: {existingSecret: mine}
+      dxcache:
+        enabled: true
+        clusters: [{name: A, host: a.example, port: 7300, call: N0CALL-7}]
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_API_KEY, valueFrom: {secretKeyRef: {name: RELEASE-NAME-wavelog-app, key: dxcache-api-key}}}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_URL, value: "http://RELEASE-NAME-wavelog-dxcache.NAMESPACE.svc:3000"}
+  - it: passes empty url and key when disabled
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_URL, value: ""}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_API_KEY, value: ""}
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_URL_PREFIX, value: "http://RELEASE-NAME-wavelog-dxcache."}
