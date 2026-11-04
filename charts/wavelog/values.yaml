@@ -215,3 +215,51 @@ tolerations: []
 affinity: {}
 # Extra /etc/hosts entries for the Wavelog pod ({ip, hostnames} list).
 hostAliases: []
+
+dxcache:
+  enabled: false
+  image:
+    repository: ghcr.io/int2001/dxclusterapi
+    tag: "1.5.8"
+    pullPolicy: IfNotPresent
+  # Default login callsign for every cluster entry. Use a dedicated SSID
+  # (e.g. N0CALL-7) so your own telnet sessions don't collide with it.
+  callsign: ""
+  clusters: []
+  #  - name: DM3KS            # display name -> "cluster"
+  #    host: dm3ks.de
+  #    port: 7300
+  #    call: ""               # default: dxcache.callsign
+  #    loginPrompt: "login:"  # default
+  #    customCommand: ""      # optional, sent after login
+  #    existingSecret: ""     # optional Secret with the login password
+  #    passwordKey: password
+  # Replace the whole CLUSTERS JSON from a Secret (key clusters-json);
+  # when set, clusters/callsign above are ignored.
+  existingClustersSecret: ""
+  pota: {enabled: true, pollingInterval: 120}
+  sota: {enabled: true, pollingInterval: 120}
+  rbn:
+    enabled: false
+    callsign: ""   # default: dxcache.callsign
+    spotTimeout: 5
+    cwRtty: true
+    ft8: false
+  maxCache: 1000
+  spotMaxAge: 120
+  apiSpotLimit: 500
+  dxcc:
+    maxConcurrent: 2
+    cacheMaxSize: 5000
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 1Gi
+    existingClaim: ""
+  extraEnv: []
+  resources: {}
+  podSecurityContext: {}
+  securityContext: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}

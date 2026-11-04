@@ -231,3 +231,53 @@ app.kubernetes.io/component: mariadb
 {{ include "wavelog.selectorLabels" . }}
 app.kubernetes.io/component: backup
 {{- end -}}
+
+{{- define "wavelog.dxcache.fullname" -}}
+{{- printf "%s-dxcache" (include "wavelog.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "wavelog.dxcache.selectorLabels" -}}
+{{ include "wavelog.selectorLabels" . }}
+app.kubernetes.io/component: dxcache
+{{- end -}}
+
+{{/* In-cluster URL of the DXCache Service, no trailing slash. */}}
+{{- define "wavelog.dxcache.url" -}}
+{{- printf "http://%s.%s.svc:3000" (include "wavelog.dxcache.fullname" .) .Release.Namespace -}}
+{{- end -}}
+
+{{/* URL prefix of the DXCache Service host, for Wavelog's allowed-host check. */}}
+{{- define "wavelog.dxcache.urlPrefix" -}}
+{{- printf "http://%s." (include "wavelog.dxcache.fullname" .) -}}
+{{- end -}}
+
+{{/* Wavelog lookup API that DXCache calls for DXCC enrichment. */}}
+{{- define "wavelog.dxcache.lookupUrl" -}}
+{{- printf "http://%s.%s.svc:%v/index.php/api/lookup" (include "wavelog.fullname" .) .Release.Namespace .Values.service.port -}}
+{{- end -}}
+
+{{/* Fail fast on invalid DXCache settings; a no-op when disabled. */}}
+{{- define "wavelog.dxcache.validate" -}}
+{{- $d := .Values.dxcache -}}
+{{- if $d.enabled -}}
+{{- if ne .Values.install.mode "declarative" -}}
+{{- fail "dxcache.enabled requires install.mode=declarative" -}}
+{{- end -}}
+{{- if not $d.existingClustersSecret -}}
+{{- if not $d.clusters -}}
+{{- fail "dxcache.clusters or dxcache.existingClustersSecret is required" -}}
+{{- end -}}
+{{- range $i, $c := $d.clusters -}}
+{{- if not (or $c.call $d.callsign) -}}
+{{- fail (printf "dxcache.clusters[%d]: call or dxcache.callsign is required" $i) -}}
+{{- end -}}
+{{- if not (and $c.host $c.port) -}}
+{{- fail (printf "dxcache.clusters[%d]: host and port are required" $i) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if and $d.rbn.enabled (not (or $d.rbn.callsign $d.callsign)) -}}
+{{- fail "dxcache.rbn.enabled requires dxcache.rbn.callsign or dxcache.callsign" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

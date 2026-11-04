@@ -1,0 +1,55 @@
+suite: dxcache
+templates:
+  - validate.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+tests:
+  - it: rejects wizard mode
+    set:
+      install: {mode: wizard}
+      dxcache:
+        enabled: true
+        clusters: [{name: A, host: a.example, port: 7300, call: N0CALL-7}]
+    asserts:
+      - failedTemplate:
+          errorMessage: "dxcache.enabled requires install.mode=declarative"
+  - it: requires a cluster
+    set:
+      dxcache: {enabled: true, clusters: []}
+    asserts:
+      - failedTemplate:
+          errorMessage: "dxcache.clusters or dxcache.existingClustersSecret is required"
+  - it: requires a callsign per cluster
+    set:
+      dxcache:
+        enabled: true
+        callsign: ""
+        clusters: [{name: A, host: a.example, port: 7300}]
+    asserts:
+      - failedTemplate:
+          errorPattern: "dxcache.clusters\\[0\\]: call or dxcache.callsign is required"
+  - it: requires host and port
+    set:
+      dxcache:
+        enabled: true
+        clusters: [{name: A, call: N0CALL-7}]
+    asserts:
+      - failedTemplate:
+          errorPattern: "dxcache.clusters\\[0\\]: host and port are required"
+  - it: requires an RBN callsign
+    set:
+      dxcache:
+        enabled: true
+        callsign: ""
+        existingClustersSecret: s
+        rbn: {enabled: true, callsign: ""}
+    asserts:
+      - failedTemplate:
+          errorMessage: "dxcache.rbn.enabled requires dxcache.rbn.callsign or dxcache.callsign"
+  - it: accepts existingClustersSecret alone
+    set:
+      dxcache: {enabled: true, existingClustersSecret: s}
+    asserts:
+      - notFailedTemplate: {}
