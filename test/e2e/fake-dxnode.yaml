@@ -1,0 +1,114 @@
+# Two fake DXSpider-style telnet nodes for the dxcache scenario. Each answers
+# the login prompt, then every 20 s sends its spot lines, one TCP write per
+# line: DXCache parses each received chunk as a single spot and only when the
+# chunk starts with "DX de".
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fake-dxnode
+data:
+  node.sh: |
+    printf 'login: '
+    read -r call
+    printf 'Hello %s, this is fake DX node %s\r\n' "$call" "$NODE"
+    while :; do
+      sleep 2
+      t=$(date -u +%H%M)
+      echo "$SPOTS" | while read -r spotter freq dx mode; do
+        [ -n "$spotter" ] || continue
+        printf 'DX de %s:   %s  %-12s %s 599                         %sZ\r\n' \
+          "$spotter" "$freq" "$dx" "$mode" "$t"
+        sleep 1
+      done
+      sleep 18
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fake-dx-a
+  labels: {app: fake-dx-a}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: fake-dx-a}
+  template:
+    metadata:
+      labels: {app: fake-dx-a}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 65534, runAsGroup: 65534}
+      containers:
+        - name: node
+          image: busybox:1.37
+          command: [nc, -ll, -p, "7300", -e, sh, /node/node.sh]
+          env:
+            - {name: NODE, value: a}
+            - name: SPOTS
+              value: |
+                N0CALL-1 14025.0 K1ABC CW
+                N0CALL-1 21074.0 JA1XYZ FT8
+          ports:
+            - {name: telnet, containerPort: 7300}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: node, mountPath: /node, readOnly: true}
+      volumes:
+        - name: node
+          configMap: {name: fake-dxnode}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fake-dx-a
+spec:
+  selector: {app: fake-dx-a}
+  ports:
+    - {name: telnet, port: 7300, targetPort: telnet}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fake-dx-b
+  labels: {app: fake-dx-b}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: fake-dx-b}
+  template:
+    metadata:
+      labels: {app: fake-dx-b}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 65534, runAsGroup: 65534}
+      containers:
+        - name: node
+          image: busybox:1.37
+          command: [nc, -ll, -p, "7300", -e, sh, /node/node.sh]
+          env:
+            - {name: NODE, value: b}
+            - name: SPOTS
+              value: |
+                N0CALL-2 14025.0 K1ABC CW
+                N0CALL-2 7010.0 VK2ABC CW
+          ports:
+            - {name: telnet, containerPort: 7300}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: node, mountPath: /node, readOnly: true}
+      volumes:
+        - name: node
+          configMap: {name: fake-dxnode}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fake-dx-b
+spec:
+  selector: {app: fake-dx-b}
+  ports:
+    - {name: telnet, port: 7300, targetPort: telnet}

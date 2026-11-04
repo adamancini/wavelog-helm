@@ -1,0 +1,8 @@
+baseUrl: https://wavelog.example.com/
+install:
+  mode: declarative
+dxcache:
+  enabled: true
+  callsign: N0CALL-7
+  clusters:
+    - {host: dxc.example.org, port: 7300}

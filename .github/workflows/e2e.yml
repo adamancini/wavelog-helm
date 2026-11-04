@@ -28,6 +28,7 @@ jobs:
           - apikeys
           - sso
           - backup
+          - dxcache
     env:
       E2E_KUBE_CONTEXT: kind-wavelog-e2e
     steps:

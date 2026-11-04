@@ -1,0 +1,24 @@
+baseUrl: https://wavelog.example.com/
+install:
+  mode: declarative
+  admin:
+    username: admin
+    callsign: N0CALL
+    locator: AA00aa
+persistence:
+  size: 1Gi
+mariadb:
+  persistence:
+    size: 1Gi
+dxcache:
+  enabled: true
+  callsign: N0CALL-7
+  clusters:
+    - {name: fake-dx-a, host: fake-dx-a, port: 7300}
+    - {name: fake-dx-b, host: fake-dx-b, port: 7300}
+  pota:
+    enabled: false
+  sota:
+    enabled: false
+  persistence:
+    size: 1Gi
