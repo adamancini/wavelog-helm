@@ -545,16 +545,16 @@ With `install.mode=wizard`:
 | `dxcache.clusters` | `[]` | DX cluster nodes. Required unless existingClustersSecret is set. Each entry: name: display name host / port: telnet endpoint (required) call: login callsign (default: dxcache.callsign) loginPrompt: default `login:` customCommand: optional command sent after login existingSecret / passwordKey: Secret holding the login password (passwordKey defaults to password) |
 | `dxcache.existingClustersSecret` | `""` | Existing Secret with key clusters-json that replaces the whole CLUSTERS value. When set, clusters and callsign are ignored. |
 | `dxcache.pota.enabled` | `true` | Include POTA spots. |
-| `dxcache.pota.pollingInterval` | `120` | Polling interval (DXCache *_POLLING_INTERVAL). |
+| `dxcache.pota.pollingInterval` | `120` | Polling interval. |
 | `dxcache.sota.enabled` | `true` | Include SOTA spots. |
-| `dxcache.sota.pollingInterval` | `120` | Polling interval (DXCache *_POLLING_INTERVAL). |
+| `dxcache.sota.pollingInterval` | `120` | Polling interval. |
 | `dxcache.rbn.enabled` | `false` | Include Reverse Beacon Network spots. |
 | `dxcache.rbn.callsign` | `""` | Login callsign for RBN (default: dxcache.callsign). |
 | `dxcache.rbn.spotTimeout` | `5` |  |
 | `dxcache.rbn.cwRtty` | `true` | Include CW and RTTY spots. |
 | `dxcache.rbn.ft8` | `false` | Include FT8 spots. |
 | `dxcache.maxCache` | `1000` | Maximum number of spots kept. |
-| `dxcache.spotMaxAge` | `120` | Maximum age of a spot (DXCache SPOT_MAX_AGE). |
+| `dxcache.spotMaxAge` | `120` | Maximum age of a spot. |
 | `dxcache.apiSpotLimit` | `500` | Maximum number of spots returned per API request. |
 | `dxcache.dxcc.maxConcurrent` | `2` | Concurrent DXCC lookups against Wavelog. |
 | `dxcache.dxcc.cacheMaxSize` | `5000` | Size of the DXCC lookup cache. |
