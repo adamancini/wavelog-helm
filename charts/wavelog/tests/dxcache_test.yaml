@@ -351,3 +351,24 @@ tests:
         documentIndex: 2
       - equal: {path: "spec.ingress[0].ports[0].port", value: 3000}
         documentIndex: 2
+---
+suite: dxcache lookup gate script
+templates:
+  - configmap-dxcache.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+  dxcache:
+    enabled: true
+    callsign: N0CALL-7
+    clusters: [{name: A, host: a.example, port: 7300}]
+tests:
+  - it: probes with the N0CALL placeholder, not a real callsign
+    asserts:
+      - matchRegex: {path: 'data["wait-lookup.js"]', pattern: 'callsign: "N0CALL"'}
+      - notMatchRegex: {path: 'data["wait-lookup.js"]', pattern: 'DL1AA'}
+  - it: logs the error message and the response status with a body excerpt
+    asserts:
+      - matchRegex: {path: 'data["wait-lookup.js"]', pattern: 'e\.message'}
+      - matchRegex: {path: 'data["wait-lookup.js"]', pattern: 'status \$\{res\.status\}: \$\{excerpt\(text\)\}'}
