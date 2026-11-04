@@ -178,3 +178,163 @@ tests:
       - contains:
           path: spec.template.spec.initContainers[1].env
           content: {name: WL_DXCACHE_URL_PREFIX, value: "http://RELEASE-NAME-wavelog-dxcache."}
+---
+suite: dxcache disabled
+templates:
+  - dxcache-deployment.yaml
+  - dxcache-service.yaml
+  - dxcache-pvc.yaml
+  - configmap-dxcache.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+tests:
+  - it: renders nothing when disabled
+    asserts:
+      - hasDocuments: {count: 0}
+---
+suite: dxcache deployment
+templates:
+  - dxcache-deployment.yaml
+  - dxcache-secret.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+  dxcache:
+    enabled: true
+    callsign: N0CALL-7
+    clusters: [{name: A, host: a.example, port: 7300}]
+tests:
+  - it: uses Recreate and one replica
+    template: dxcache-deployment.yaml
+    asserts:
+      - equal: {path: spec.replicas, value: 1}
+      - equal: {path: spec.strategy.type, value: Recreate}
+  - it: pins the image
+    template: dxcache-deployment.yaml
+    asserts:
+      - equal: {path: "spec.template.spec.containers[0].image", value: "ghcr.io/int2001/dxclusterapi:1.5.8"}
+  - it: gates on the lookup
+    template: dxcache-deployment.yaml
+    asserts:
+      - equal: {path: "spec.template.spec.initContainers[0].name", value: wait-lookup}
+      - equal: {path: "spec.template.spec.initContainers[0].command", value: [bun, run, /wait/wait-lookup.js]}
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content: {name: WAVELOG_URL, value: "http://RELEASE-NAME-wavelog.NAMESPACE.svc:80/index.php/api/lookup"}
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content: {name: WAVELOG_KEY, valueFrom: {secretKeyRef: {name: RELEASE-NAME-wavelog-app, key: dxcache-api-key}}}
+  - it: wires WAVELOG_URL through the Service port
+    template: dxcache-deployment.yaml
+    set:
+      service: {port: 8080}
+      auth:
+        mode: header
+        header:
+          jwksUri: https://idp.example.com/realms/example/protocol/openid-connect/certs
+      oauth2Proxy:
+        enabled: true
+        issuerUrl: https://idp.example.com/realms/example
+        existingSecret: wavelog-oauth2-proxy
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: WAVELOG_URL, value: "http://RELEASE-NAME-wavelog.NAMESPACE.svc:8080/index.php/api/lookup"}
+  - it: reads CLUSTERS from existingClustersSecret
+    template: dxcache-deployment.yaml
+    set:
+      dxcache: {existingClustersSecret: s}
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CLUSTERS, valueFrom: {secretKeyRef: {name: s, key: clusters-json}}}
+  - it: lets extraEnv override
+    template: dxcache-deployment.yaml
+    set:
+      dxcache:
+        extraEnv: [{name: LIVE_PAGE_ENABLED, value: "true"}]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[33]
+          value: {name: LIVE_PAGE_ENABLED, value: "true"}
+  - it: mounts the existing claim
+    template: dxcache-deployment.yaml
+    set:
+      dxcache: {persistence: {existingClaim: c}}
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content: {name: data, persistentVolumeClaim: {claimName: c}}
+---
+suite: dxcache pvc
+templates:
+  - dxcache-pvc.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+  dxcache:
+    enabled: true
+    callsign: N0CALL-7
+    clusters: [{name: A, host: a.example, port: 7300}]
+tests:
+  - it: renders a kept claim
+    asserts:
+      - equal: {path: metadata.name, value: RELEASE-NAME-wavelog-dxcache}
+      - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
+  - it: renders nothing with an existing claim
+    set:
+      dxcache: {persistence: {existingClaim: c}}
+    asserts:
+      - hasDocuments: {count: 0}
+---
+suite: dxcache names
+templates:
+  - dxcache-service.yaml
+  - deployment.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+  fullnameOverride: logbook
+  dxcache:
+    enabled: true
+    callsign: N0CALL-7
+    clusters: [{name: A, host: a.example, port: 7300}]
+tests:
+  - it: follows fullnameOverride
+    asserts:
+      - equal: {path: metadata.name, value: logbook-dxcache}
+        template: dxcache-service.yaml
+      - equal: {path: "spec.ports[0].port", value: 3000}
+        template: dxcache-service.yaml
+      - contains:
+          path: spec.template.spec.initContainers[1].env
+          content: {name: WL_DXCACHE_URL, value: "http://logbook-dxcache.NAMESPACE.svc:3000"}
+        template: deployment.yaml
+---
+suite: dxcache networkpolicy
+templates:
+  - networkpolicy.yaml
+set:
+  baseUrl: https://w.example.com
+  install:
+    mode: declarative
+  networkPolicy: {enabled: true}
+  dxcache:
+    enabled: true
+    callsign: N0CALL-7
+    clusters: [{name: A, host: a.example, port: 7300}]
+tests:
+  - it: adds a DXCache NetworkPolicy
+    asserts:
+      - hasDocuments: {count: 3}
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: dxcache
+        documentIndex: 2
+      - equal: {path: "spec.ingress[0].ports[0].port", value: 3000}
+        documentIndex: 2

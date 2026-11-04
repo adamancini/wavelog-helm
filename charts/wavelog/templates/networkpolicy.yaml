@@ -45,4 +45,28 @@ spec:
         - port: 3306
           protocol: TCP
 {{- end }}
+{{- if .Values.dxcache.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "wavelog.dxcache.fullname" . }}
+  labels:
+    {{- include "wavelog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dxcache
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "wavelog.dxcache.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "wavelog.appSelectorLabels" . | nindent 14 }}
+      ports:
+        - port: 3000
+          protocol: TCP
+{{- end }}
 {{- end }}

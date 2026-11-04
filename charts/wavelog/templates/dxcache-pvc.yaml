@@ -1,0 +1,20 @@
+{{- if and .Values.dxcache.enabled .Values.dxcache.persistence.enabled (not .Values.dxcache.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "wavelog.dxcache.fullname" . }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "wavelog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dxcache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.dxcache.persistence.size }}
+  {{- if .Values.dxcache.persistence.storageClass }}
+  storageClassName: {{ .Values.dxcache.persistence.storageClass | quote }}
+  {{- end }}
+{{- end }}

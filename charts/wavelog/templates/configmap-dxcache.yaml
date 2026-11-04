@@ -1,0 +1,12 @@
+{{- if .Values.dxcache.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wavelog.dxcache.fullname" . }}-wait
+  labels:
+    {{- include "wavelog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dxcache
+data:
+  wait-lookup.js: |
+    {{- .Files.Get "files/dxcache-wait-lookup.js" | nindent 4 }}
+{{- end }}

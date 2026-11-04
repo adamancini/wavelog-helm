@@ -1,0 +1,151 @@
+{{- if .Values.dxcache.enabled }}
+{{- $d := .Values.dxcache }}
+{{- $image := printf "%s:%s" $d.image.repository (toString $d.image.tag) }}
+{{- $podSC := merge (deepCopy ($d.podSecurityContext | default dict)) (dict "runAsNonRoot" true "runAsUser" 1000 "runAsGroup" 1000 "fsGroup" 1000) }}
+{{- $ctrSC := merge (deepCopy ($d.securityContext | default dict)) (dict "allowPrivilegeEscalation" false "readOnlyRootFilesystem" true "capabilities" (dict "drop" (list "ALL"))) }}
+{{- $clustersSecret := $d.existingClustersSecret | default (include "wavelog.dxcache.fullname" .) }}
+{{- $checksum := "" }}
+{{- if $d.existingClustersSecret }}
+{{- $checksum = print $d.existingClustersSecret | sha256sum }}
+{{- else }}
+{{- $checksum = include (print $.Template.BasePath "/dxcache-secret.yaml") . | sha256sum }}
+{{- end }}
+{{- $appSecret := printf "%s-app" (include "wavelog.fullname" .) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wavelog.dxcache.fullname" . }}
+  labels:
+    {{- include "wavelog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dxcache
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "wavelog.dxcache.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "wavelog.dxcache.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/clusters: {{ $checksum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "wavelog.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml $podSC | nindent 8 }}
+      initContainers:
+        - name: wait-lookup
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ $d.image.pullPolicy }}
+          command: [bun, run, /wait/wait-lookup.js]
+          securityContext:
+            {{- toYaml $ctrSC | nindent 12 }}
+          env:
+            - {name: WAVELOG_URL, value: {{ include "wavelog.dxcache.lookupUrl" . | toJson }}}
+            - name: WAVELOG_KEY
+              valueFrom:
+                secretKeyRef: {name: {{ $appSecret | toJson }}, key: dxcache-api-key}
+          volumeMounts:
+            - {name: wait, mountPath: /wait, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      containers:
+        - name: dxcache
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ $d.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $ctrSC | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 6
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+          env:
+            - {name: MODE, value: "docker"}
+            - {name: WEBPORT, value: "3000"}
+            - {name: BASEURL, value: ""}
+            - {name: TRUST_PROXY, value: "false"}
+            - name: CLUSTERS
+              valueFrom:
+                secretKeyRef: {name: {{ $clustersSecret | toJson }}, key: clusters-json}
+            - {name: CLUSTER_ENABLED, value: "true"}
+            - {name: POTA_ENABLED, value: {{ $d.pota.enabled | toString | toJson }}}
+            - {name: POTA_POLLING_INTERVAL, value: {{ $d.pota.pollingInterval | toString | toJson }}}
+            - {name: SOTA_ENABLED, value: {{ $d.sota.enabled | toString | toJson }}}
+            - {name: SOTA_POLLING_INTERVAL, value: {{ $d.sota.pollingInterval | toString | toJson }}}
+            - {name: RBN_ENABLED, value: {{ $d.rbn.enabled | toString | toJson }}}
+            - {name: RBN_CALLSIGN, value: {{ $d.rbn.callsign | default $d.callsign | toString | toJson }}}
+            - {name: RBN_SPOT_TIMEOUT, value: {{ $d.rbn.spotTimeout | toString | toJson }}}
+            - {name: RBN_CW_RTTY_ENABLED, value: {{ $d.rbn.cwRtty | toString | toJson }}}
+            - {name: RBN_FT8_ENABLED, value: {{ $d.rbn.ft8 | toString | toJson }}}
+            - {name: MAXCACHE, value: {{ $d.maxCache | toString | toJson }}}
+            - {name: SPOT_MAX_AGE, value: {{ $d.spotMaxAge | toString | toJson }}}
+            - {name: API_SPOT_LIMIT, value: {{ $d.apiSpotLimit | toString | toJson }}}
+            - {name: MAX_CONCURRENT_DXCC, value: {{ $d.dxcc.maxConcurrent | toString | toJson }}}
+            - {name: DXCC_CACHE_MAX_SIZE, value: {{ $d.dxcc.cacheMaxSize | toString | toJson }}}
+            - {name: WAVELOG_URL, value: {{ include "wavelog.dxcache.lookupUrl" . | toJson }}}
+            - name: WAVELOG_KEY
+              valueFrom:
+                secretKeyRef: {name: {{ $appSecret | toJson }}, key: dxcache-api-key}
+            - {name: API_V1_ENABLED, value: "true"}
+            - {name: ENRICHMENT_ENABLED, value: "true"}
+            - {name: MODE_CLASSIFIER_ENABLED, value: "true"}
+            - {name: PERSISTENCE_ENABLED, value: "true"}
+            - {name: API_V2_ENABLED, value: "false"}
+            - {name: LIVE_PAGE_ENABLED, value: "false"}
+            - {name: WEBSOCKET_ENABLED, value: "false"}
+            - {name: ANALYTICS_ENABLED, value: "false"}
+            - {name: RATE_LIMITER_ENABLED, value: "false"}
+            - {name: FILE_LOGGING_ENABLED, value: "false"}
+            - {name: PERSISTENCE_PATH, value: "/usr/src/app/data/spots-cache.json"}
+            {{- with $d.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with $d.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - {name: data, mountPath: /usr/src/app/data}
+            - {name: logs, mountPath: /usr/src/app/logs}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: data
+          {{- if $d.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $d.persistence.existingClaim | default (include "wavelog.dxcache.fullname" .) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: wait
+          configMap:
+            name: {{ include "wavelog.dxcache.fullname" . }}-wait
+      {{- with $d.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $d.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $d.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
