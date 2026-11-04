@@ -470,14 +470,14 @@ function api_keys_from_env(int $count): array
 }
 
 // user_id of the named user; fails when there is none.
-function admin_user_id(mysqli $db, string $user): int
+function admin_user_id(mysqli $db, string $user, string $ctx = 'apiKeys'): int
 {
     $find = $db->prepare('SELECT user_id FROM users WHERE user_name = ?');
     $find->bind_param('s', $user);
     $find->execute();
     $row = $find->get_result()->fetch_row();
     if (!$row) {
-        fail("apiKeys user $user not found");
+        fail("$ctx user $user not found");
     }
     return (int) $row[0];
 }
@@ -544,7 +544,7 @@ function configure_dxcache(mysqli $db): void
         if ($key === '') {
             fail('dxcache: WL_DXCACHE_API_KEY is empty');
         }
-        upsert_api_key($db, $key, 'r', 'DXCache (managed by chart)', admin_user_id($db, env('WL_ADMIN_USERNAME')));
+        upsert_api_key($db, $key, 'r', 'DXCache (managed by chart)', admin_user_id($db, env('WL_ADMIN_USERNAME'), 'dxcache'));
         $opt = $db->prepare("INSERT INTO options (option_name, option_value) VALUES ('dxcache_url', ?) ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)");
         $opt->bind_param('s', $url);
         $opt->execute();

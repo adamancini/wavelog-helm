@@ -246,7 +246,7 @@ app.kubernetes.io/component: dxcache
 {{- printf "http://%s.%s.svc:3000" (include "wavelog.dxcache.fullname" .) .Release.Namespace -}}
 {{- end -}}
 
-{{/* URL prefix of the DXCache Service host, for Wavelog's allowed-host check. */}}
+{{/* Ownership prefix of the chart's DXCache URL: bootstrap clears dxcache_url on disable only when it starts with this. */}}
 {{- define "wavelog.dxcache.urlPrefix" -}}
 {{- printf "http://%s." (include "wavelog.dxcache.fullname" .) -}}
 {{- end -}}
