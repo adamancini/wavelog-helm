@@ -257,10 +257,18 @@ tests:
       dxcache:
         extraEnv: [{name: LIVE_PAGE_ENABLED, value: "true"}]
     asserts:
-      - equal:
-          path: spec.template.spec.containers[0].env[33]
-          value: {name: LIVE_PAGE_ENABLED, value: "true"}
-      - lengthEqual: {path: "spec.template.spec.containers[0].env", count: 34}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: LIVE_PAGE_ENABLED, value: "true"}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content: {name: LIVE_PAGE_ENABLED, value: "false"}
+      - lengthEqual: {path: "spec.template.spec.containers[0].env", count: 33}
+  - it: does not mount the service account token
+    template: dxcache-deployment.yaml
+    asserts:
+      - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
+      - exists: {path: 'spec.template.metadata.annotations["checksum/wait"]'}
   - it: keeps false and zero overrides in security contexts
     template: dxcache-deployment.yaml
     set:
