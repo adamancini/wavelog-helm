@@ -64,5 +64,13 @@ e2e_sql "UPDATE options SET option_value='$FOREIGN_URL' WHERE option_name='dxcac
 e2e_restart_wavelog
 assert_eq "$FOREIGN_URL" "$(dxcache_url)" "foreign dxcache_url kept"
 
+# Re-enable: the chart owns the URL again and overwrites the foreign one. The
+# retained key is reused, so there is still exactly one managed key.
+e2e_upgrade -f "$VALUES"
+k rollout status "deployment/$E2E_FULLNAME-dxcache" --timeout=300s >/dev/null
+e2e_restart_wavelog
+assert_eq "$CHART_URL" "$(dxcache_url)" "dxcache_url set back to the chart URL on re-enable"
+assert_eq 1 "$(key_count)" "one DXCache API key after re-enable"
+
 e2e_uninstall
 echo "PASS: $SCENARIO"
