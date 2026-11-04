@@ -545,7 +545,7 @@ function configure_dxcache(mysqli $db): void
             fail('dxcache: WL_DXCACHE_API_KEY is empty');
         }
         upsert_api_key($db, $key, 'r', 'DXCache (managed by chart)', admin_user_id($db, env('WL_ADMIN_USERNAME')));
-        $opt = $db->prepare("INSERT INTO options (option_name, option_value, autoload) VALUES ('dxcache_url', ?, 'yes') ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)");
+        $opt = $db->prepare("INSERT INTO options (option_name, option_value) VALUES ('dxcache_url', ?) ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)");
         $opt->bind_param('s', $url);
         $opt->execute();
         info('dxcache wired: ' . $url);
