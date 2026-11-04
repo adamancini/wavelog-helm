@@ -36,5 +36,7 @@ mariadb.auth.existingSecret.
 {{- end }}
 {{- if .Values.dxcache.enabled }}
 
-DXCache: kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "wavelog.dxcache.fullname" . }} 3000 && curl -s localhost:3000/spots/ | head
+DXCache:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "wavelog.dxcache.fullname" . }} 3000
+  In another terminal: curl -s localhost:3000/spots/ | head
 {{- end }}

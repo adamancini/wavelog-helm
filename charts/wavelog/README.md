@@ -276,7 +276,7 @@ set, `dxcache.clusters` and `dxcache.callsign` are ignored.
 Check the result:
 
 ```console
-kubectl port-forward svc/<fullname>-dxcache 3000
+kubectl -n <namespace> port-forward svc/<fullname>-dxcache 3000
 curl -s localhost:3000/spots/ | head
 ```
 
@@ -542,19 +542,19 @@ With `install.mode=wizard`:
 | `dxcache.image.tag` | `"1.5.8"` |  |
 | `dxcache.image.pullPolicy` | `IfNotPresent` |  |
 | `dxcache.callsign` | `""` | Default login callsign for every cluster entry. Use a dedicated SSID such as N0CALL-7. |
-| `dxcache.clusters` | `[]` | DX cluster nodes. Required unless existingClustersSecret is set. Each entry: name: display name host / port: telnet endpoint (required) call: login callsign (default: dxcache.callsign) loginPrompt: default `login:` customCommand: optional command sent after login existingSecret / passwordKey: Secret holding the login password (passwordKey defaults to password) |
+| `dxcache.clusters` | `[]` | DX cluster nodes. Required unless existingClustersSecret is set. Each entry:<br>name: display name<br>host / port: telnet endpoint (required)<br>call: login callsign (default: dxcache.callsign)<br>loginPrompt: default `login:`<br>customCommand: optional command sent after login<br>existingSecret / passwordKey: Secret holding the login password (passwordKey defaults to password) |
 | `dxcache.existingClustersSecret` | `""` | Existing Secret with key clusters-json that replaces the whole CLUSTERS value. When set, clusters and callsign are ignored. |
 | `dxcache.pota.enabled` | `true` | Include POTA spots. |
-| `dxcache.pota.pollingInterval` | `120` | Polling interval. |
+| `dxcache.pota.pollingInterval` | `120` | Polling interval in seconds. |
 | `dxcache.sota.enabled` | `true` | Include SOTA spots. |
-| `dxcache.sota.pollingInterval` | `120` | Polling interval. |
+| `dxcache.sota.pollingInterval` | `120` | Polling interval in seconds. |
 | `dxcache.rbn.enabled` | `false` | Include Reverse Beacon Network spots. |
 | `dxcache.rbn.callsign` | `""` | Login callsign for RBN (default: dxcache.callsign). |
-| `dxcache.rbn.spotTimeout` | `5` |  |
+| `dxcache.rbn.spotTimeout` | `5` | Spot timeout in minutes. |
 | `dxcache.rbn.cwRtty` | `true` | Include CW and RTTY spots. |
 | `dxcache.rbn.ft8` | `false` | Include FT8 spots. |
 | `dxcache.maxCache` | `1000` | Maximum number of spots kept. |
-| `dxcache.spotMaxAge` | `120` | Maximum age of a spot. |
+| `dxcache.spotMaxAge` | `120` | Maximum age of a spot, in minutes. |
 | `dxcache.apiSpotLimit` | `500` | Maximum number of spots returned per API request. |
 | `dxcache.dxcc.maxConcurrent` | `2` | Concurrent DXCC lookups against Wavelog. |
 | `dxcache.dxcc.cacheMaxSize` | `5000` | Size of the DXCC lookup cache. |
