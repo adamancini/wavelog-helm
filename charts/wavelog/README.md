@@ -231,6 +231,74 @@ Egress is not restricted: Wavelog calls LoTW, Club Log, eQSL, QRZ and the JWKS U
 port accepts traffic from any source, so an ingress controller or gateway in another namespace
 needs no extra rule. Your CNI must enforce NetworkPolicy.
 
+## DXCache
+
+[DXCache](https://github.com/int2001/DXClusterAPI) (DXClusterAPI) is an optional component
+that connects to DX cluster nodes, POTA, SOTA and optionally the Reverse Beacon Network, and
+serves the merged spots to Wavelog's DX cluster page. Set `dxcache.enabled=true` to deploy it
+as its own Deployment and Service (port 3000). The chart points Wavelog at it automatically.
+It requires `install.mode=declarative`.
+
+A two-node example:
+
+```yaml
+dxcache:
+  enabled: true
+  callsign: N0CALL-7
+  clusters:
+    - name: DM3KS
+      host: dm3ks.de
+      port: 7300
+    - name: DXSpots
+      host: dxspots.com
+      port: 7300
+```
+
+Use a dedicated SSID such as `N0CALL-7` for `dxcache.callsign`, so your own telnet sessions
+with the base call do not collide with the DXCache login.
+
+Some nodes need a password. Reference a Secret per cluster entry:
+
+```yaml
+dxcache:
+  clusters:
+    - name: DM3KS
+      host: dm3ks.de
+      port: 7300
+      existingSecret: dm3ks-login
+      passwordKey: password   # default
+```
+
+To manage the whole cluster list yourself, set `dxcache.existingClustersSecret` to a Secret
+with the key `clusters-json`, holding the JSON array that DXCache reads as `CLUSTERS`. When
+set, `dxcache.clusters` and `dxcache.callsign` are ignored.
+
+Check the result:
+
+```console
+kubectl port-forward svc/<fullname>-dxcache 3000
+curl -s localhost:3000/spots/ | head
+```
+
+### DXCache notes and limitations
+
+- The upstream image `ghcr.io/int2001/dxclusterapi` is published for linux/amd64 only. On
+  arm64 nodes, build it from the upstream tag (plain JavaScript dependencies, and the base
+  image `oven/bun:1` is multi-arch) and point `dxcache.image` at it, or pin the pod to an
+  amd64 node with `dxcache.nodeSelector`.
+- When a cluster entry uses `existingSecret`, the chart reads the Secret with `lookup` at
+  render time. `helm template` and dry-runs without cluster access fail for that
+  configuration. GitOps controllers that render in the cluster (such as the Flux
+  helm-controller) work.
+- DXCache drops spots it cannot resolve to a DXCC entity through Wavelog. A startup gate waits
+  until Wavelog's lookup works. Spots that arrive while Wavelog restarts are lost, and calls
+  that failed in that window are not retried for up to 5 minutes.
+- Overriding a built-in variable through `dxcache.extraEnv` appends a second entry with the
+  same name. The last one wins, but kubectl may warn about the duplicate.
+- Posting spots back to cluster nodes is not supported.
+- Wavelog's DX cluster page filters by spotter continent (default EU). To see spots from
+  other continents, change the "de" filter in Wavelog's UI.
+
 ## Persistence
 
 The data volume (`persistence`) and the backup volume (`backup.persistence`) carry
@@ -469,6 +537,38 @@ With `install.mode=wizard`:
 | `tolerations` | `[]` |  |
 | `affinity` | `{}` |  |
 | `hostAliases` | `[]` | Extra /etc/hosts entries for the Wavelog pod ({ip, hostnames} list). |
+| `dxcache.enabled` | `false` | Deploy DXCache (DXClusterAPI) and point Wavelog's DX cluster page at it. Requires install.mode=declarative. |
+| `dxcache.image.repository` | `ghcr.io/int2001/dxclusterapi` | Published for linux/amd64 only. |
+| `dxcache.image.tag` | `"1.5.8"` |  |
+| `dxcache.image.pullPolicy` | `IfNotPresent` |  |
+| `dxcache.callsign` | `""` | Default login callsign for every cluster entry. Use a dedicated SSID such as N0CALL-7. |
+| `dxcache.clusters` | `[]` | DX cluster nodes. Required unless existingClustersSecret is set. Each entry: name: display name host / port: telnet endpoint (required) call: login callsign (default: dxcache.callsign) loginPrompt: default `login:` customCommand: optional command sent after login existingSecret / passwordKey: Secret holding the login password (passwordKey defaults to password) |
+| `dxcache.existingClustersSecret` | `""` | Existing Secret with key clusters-json that replaces the whole CLUSTERS value. When set, clusters and callsign are ignored. |
+| `dxcache.pota.enabled` | `true` | Include POTA spots. |
+| `dxcache.pota.pollingInterval` | `120` | Polling interval (DXCache *_POLLING_INTERVAL). |
+| `dxcache.sota.enabled` | `true` | Include SOTA spots. |
+| `dxcache.sota.pollingInterval` | `120` | Polling interval (DXCache *_POLLING_INTERVAL). |
+| `dxcache.rbn.enabled` | `false` | Include Reverse Beacon Network spots. |
+| `dxcache.rbn.callsign` | `""` | Login callsign for RBN (default: dxcache.callsign). |
+| `dxcache.rbn.spotTimeout` | `5` |  |
+| `dxcache.rbn.cwRtty` | `true` | Include CW and RTTY spots. |
+| `dxcache.rbn.ft8` | `false` | Include FT8 spots. |
+| `dxcache.maxCache` | `1000` | Maximum number of spots kept. |
+| `dxcache.spotMaxAge` | `120` | Maximum age of a spot (DXCache SPOT_MAX_AGE). |
+| `dxcache.apiSpotLimit` | `500` | Maximum number of spots returned per API request. |
+| `dxcache.dxcc.maxConcurrent` | `2` | Concurrent DXCC lookups against Wavelog. |
+| `dxcache.dxcc.cacheMaxSize` | `5000` | Size of the DXCC lookup cache. |
+| `dxcache.persistence.enabled` | `true` |  |
+| `dxcache.persistence.storageClass` | `""` |  |
+| `dxcache.persistence.size` | `1Gi` |  |
+| `dxcache.persistence.existingClaim` | `""` |  |
+| `dxcache.extraEnv` | `[]` | Extra environment variables for the DXCache container. A name that duplicates a built-in one is appended and wins. |
+| `dxcache.resources` | `{}` |  |
+| `dxcache.podSecurityContext` | `{}` |  |
+| `dxcache.securityContext` | `{}` |  |
+| `dxcache.nodeSelector` | `{}` |  |
+| `dxcache.tolerations` | `[]` |  |
+| `dxcache.affinity` | `{}` |  |
 
 ## Testing
 
