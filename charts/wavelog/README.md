@@ -277,6 +277,7 @@ Check the result:
 
 ```console
 kubectl -n <namespace> port-forward svc/<fullname>-dxcache 3000
+# in another terminal:
 curl -s localhost:3000/spots/ | head
 ```
 
@@ -293,8 +294,16 @@ curl -s localhost:3000/spots/ | head
 - DXCache drops spots it cannot resolve to a DXCC entity through Wavelog. A startup gate waits
   until Wavelog's lookup works. Spots that arrive while Wavelog restarts are lost, and calls
   that failed in that window are not retried for up to 5 minutes.
-- Overriding a built-in variable through `dxcache.extraEnv` appends a second entry with the
-  same name. The last one wins, but kubectl may warn about the duplicate.
+- An entry in `dxcache.extraEnv` replaces the built-in variable of the same name.
+- Before rolling back below chart 0.2.0 or reinstalling under another release name, disable
+  DXCache first (`helm upgrade --set dxcache.enabled=false`) or clear the URL in Wavelog
+  Admin > Options > DXCluster. Otherwise Wavelog keeps pointing at a Service that is gone.
+- Editing the content of `dxcache.existingClustersSecret`, or rotating the password in a
+  per-cluster `existingSecret`, does not restart the pod until the next `helm upgrade` or
+  reconcile. Restart the DXCache deployment manually.
+- Upstream always serves `GET /api/v2/dxcc/:callsign`, an unauthenticated proxy to Wavelog's
+  lookup using the loopback API key (DXCC data only). Enable `networkPolicy.enabled` to
+  restrict DXCache to the Wavelog pod.
 - Posting spots back to cluster nodes is not supported.
 - Wavelog's DX cluster page filters by spotter continent (default EU). To see spots from
   other continents, change the "de" filter in Wavelog's UI.
@@ -562,7 +571,7 @@ With `install.mode=wizard`:
 | `dxcache.persistence.storageClass` | `""` |  |
 | `dxcache.persistence.size` | `1Gi` |  |
 | `dxcache.persistence.existingClaim` | `""` |  |
-| `dxcache.extraEnv` | `[]` | Extra environment variables for the DXCache container. A name that duplicates a built-in one is appended and wins. |
+| `dxcache.extraEnv` | `[]` | Extra environment variables for the DXCache container. An entry replaces the built-in variable of the same name. |
 | `dxcache.resources` | `{}` |  |
 | `dxcache.podSecurityContext` | `{}` |  |
 | `dxcache.securityContext` | `{}` |  |
