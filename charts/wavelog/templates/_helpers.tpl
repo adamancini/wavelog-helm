@@ -256,6 +256,33 @@ app.kubernetes.io/component: dxcache
 {{- printf "http://%s.%s.svc:%v/index.php/api/lookup" (include "wavelog.fullname" .) .Release.Namespace .Values.service.port -}}
 {{- end -}}
 
+{{/*
+CLUSTERS JSON for DXCache, with per-cluster passwords read from their Secrets.
+Shared by the Secret and the pod checksum, so the pod restarts only when the
+cluster list changes (not on every chart version bump).
+*/}}
+{{- define "wavelog.dxcache.clustersJson" -}}
+{{- $d := .Values.dxcache -}}
+{{- $list := list -}}
+{{- range $i, $c := $d.clusters -}}
+{{- $password := "" -}}
+{{- if $c.existingSecret -}}
+{{- $key := $c.passwordKey | default "password" -}}
+{{- $sec := lookup "v1" "Secret" $.Release.Namespace $c.existingSecret -}}
+{{- if not (and $sec $sec.data (hasKey $sec.data $key)) -}}
+{{- fail (printf "dxcache.clusters[%d]: Secret %s key %s not found" $i $c.existingSecret $key) -}}
+{{- end -}}
+{{- $password = (index $sec.data $key) | b64dec | trim -}}
+{{- end -}}
+{{- $entry := dict "host" $c.host "port" (int $c.port) "loginPrompt" ($c.loginPrompt | default "login:") "call" ($c.call | default $d.callsign) "password" $password "cluster" ($c.name | default $c.host) -}}
+{{- if $c.customCommand -}}
+{{- $_ := set $entry "customCommand" $c.customCommand -}}
+{{- end -}}
+{{- $list = append $list $entry -}}
+{{- end -}}
+{{- toJson $list -}}
+{{- end -}}
+
 {{/* Fail fast on invalid DXCache settings; a no-op when disabled. */}}
 {{- define "wavelog.dxcache.validate" -}}
 {{- $d := .Values.dxcache -}}

@@ -283,6 +283,29 @@ tests:
     asserts:
       - equal: {path: spec.template.spec.automountServiceAccountToken, value: false}
       - exists: {path: 'spec.template.metadata.annotations["checksum/wait"]'}
+  # sha256 of [{"call":"N0CALL-7","cluster":"A","host":"a.example","loginPrompt":"login:","password":"","port":7300}]
+  - it: hashes only the cluster list into checksum/clusters
+    template: dxcache-deployment.yaml
+    asserts:
+      - equal:
+          path: 'spec.template.metadata.annotations["checksum/clusters"]'
+          value: 84fdb6a07252158103be999bf5cf6548ef04f27f4c9ebf2905591ea860739ec2
+  - it: keeps checksum/clusters across chart version bumps
+    template: dxcache-deployment.yaml
+    chart:
+      version: 9.9.9
+    asserts:
+      - equal:
+          path: 'spec.template.metadata.annotations["checksum/clusters"]'
+          value: 84fdb6a07252158103be999bf5cf6548ef04f27f4c9ebf2905591ea860739ec2
+  - it: changes checksum/clusters when the cluster list changes
+    template: dxcache-deployment.yaml
+    set:
+      dxcache.clusters: [{name: A, host: a.example, port: 7301}]
+    asserts:
+      - notEqual:
+          path: 'spec.template.metadata.annotations["checksum/clusters"]'
+          value: 84fdb6a07252158103be999bf5cf6548ef04f27f4c9ebf2905591ea860739ec2
   - it: keeps false and zero overrides in security contexts
     template: dxcache-deployment.yaml
     set:

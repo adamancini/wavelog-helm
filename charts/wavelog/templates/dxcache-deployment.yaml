@@ -51,7 +51,7 @@
 {{- if $d.existingClustersSecret }}
 {{- $checksum = print $d.existingClustersSecret | sha256sum }}
 {{- else }}
-{{- $checksum = include (print $.Template.BasePath "/dxcache-secret.yaml") . | sha256sum }}
+{{- $checksum = include "wavelog.dxcache.clustersJson" . | sha256sum }}
 {{- end }}
 {{- $extraNames := list }}
 {{- range ($d.extraEnv | default list) }}{{- $extraNames = append $extraNames .name }}{{- end }}
