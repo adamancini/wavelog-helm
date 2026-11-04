@@ -238,7 +238,10 @@ dxcache:
   # when set, clusters/callsign above are ignored.
   existingClustersSecret: ""
   pota: {enabled: true, pollingInterval: 120}
-  sota: {enabled: true, pollingInterval: 120}
+  # Off: DXCache 1.5.8 polls a SOTA API endpoint that has been retired and
+  # silently returns no spots (int2001/DXClusterAPI#39). Many DX cluster
+  # nodes carry SOTA spots in their own feed.
+  sota: {enabled: false, pollingInterval: 120}
   rbn:
     enabled: false
     callsign: ""   # default: dxcache.callsign

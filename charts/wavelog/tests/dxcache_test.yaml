@@ -216,6 +216,20 @@ tests:
     template: dxcache-deployment.yaml
     asserts:
       - equal: {path: "spec.template.spec.containers[0].image", value: "ghcr.io/int2001/dxclusterapi:1.5.8"}
+  - it: leaves SOTA polling off by default (retired upstream endpoint)
+    template: dxcache-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: SOTA_ENABLED, value: "false"}
+  - it: lets SOTA polling be re-enabled
+    template: dxcache-deployment.yaml
+    set:
+      dxcache.sota.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: SOTA_ENABLED, value: "true"}
   - it: gates on the lookup
     template: dxcache-deployment.yaml
     asserts:

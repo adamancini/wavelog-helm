@@ -304,6 +304,11 @@ curl -s localhost:3000/spots/ | head
 - Upstream always serves `GET /api/v2/dxcc/:callsign`, an unauthenticated proxy to Wavelog's
   lookup using the loopback API key (DXCC data only). Enable `networkPolicy.enabled` to
   restrict DXCache to the Wavelog pod.
+- `dxcache.sota.enabled` defaults to `false`. DXCache 1.5.8 polls a SOTA API endpoint that
+  has been retired; it still answers HTTP 200 but returns no spots, and DXCache logs nothing
+  ([int2001/DXClusterAPI#39](https://github.com/int2001/DXClusterAPI/issues/39)). Many DX
+  cluster nodes carry SOTA spots in their own feed (dm3ks.de, for example). Re-enable it once
+  an upstream release moves to the current SOTA API.
 - Posting spots back to cluster nodes is not supported.
 - Wavelog's DX cluster page filters by spotter continent (default EU). To see spots from
   other continents, change the "de" filter in Wavelog's UI.
@@ -555,7 +560,7 @@ With `install.mode=wizard`:
 | `dxcache.existingClustersSecret` | `""` | Existing Secret with key clusters-json that replaces the whole CLUSTERS value. When set, clusters and callsign are ignored. |
 | `dxcache.pota.enabled` | `true` | Include POTA spots. |
 | `dxcache.pota.pollingInterval` | `120` | Polling interval in seconds. |
-| `dxcache.sota.enabled` | `true` | Include SOTA spots. |
+| `dxcache.sota.enabled` | `false` | Poll the SOTA API for spots. Off because upstream's endpoint is retired (see notes). |
 | `dxcache.sota.pollingInterval` | `120` | Polling interval in seconds. |
 | `dxcache.rbn.enabled` | `false` | Include Reverse Beacon Network spots. |
 | `dxcache.rbn.callsign` | `""` | Login callsign for RBN (default: dxcache.callsign). |
