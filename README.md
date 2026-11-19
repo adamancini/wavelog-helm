@@ -3,7 +3,7 @@
 A Helm chart for [Wavelog](https://www.wavelog.org), the web-based amateur radio logbook.
 
 - Chart: [`charts/wavelog`](charts/wavelog), with its [README](charts/wavelog/README.md) (values, examples, backup and restore)
-- Wavelog 3.2.4, official MariaDB 11.8 image, single replica
+- Wavelog 3.2.5, official MariaDB 11.8 image, single replica
 - Declarative install (no installer clicks) or Wavelog's web wizard
 - API keys, header-based SSO with an optional oauth2-proxy sidecar, scheduled backups
 - Ingress or Gateway API HTTPRoute, optional NetworkPolicy

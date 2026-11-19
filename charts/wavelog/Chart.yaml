@@ -3,7 +3,7 @@ name: wavelog
 description: A Helm chart for Wavelog, a web-based amateur radio logbook
 type: application
 version: 0.2.2
-appVersion: "3.2.4"
+appVersion: "3.2.5"
 home: https://www.wavelog.org
 sources:
   - https://github.com/wavelog/wavelog

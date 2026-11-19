@@ -10,7 +10,7 @@ tests:
       - equal: {path: "spec.strategy.type", value: Recreate}
   - it: uses the appVersion image by default
     asserts:
-      - equal: {path: "spec.template.spec.containers[?(@.name=='wavelog')].image", value: "ghcr.io/wavelog/wavelog:3.2.4"}
+      - equal: {path: "spec.template.spec.containers[?(@.name=='wavelog')].image", value: "ghcr.io/wavelog/wavelog:3.2.5"}
   - it: sets PHP_MEMORY_LIMIT
     asserts:
       - contains:
@@ -84,7 +84,7 @@ tests:
     asserts:
       - equal: {path: "spec.template.spec.initContainers[0].name", value: volume-permissions}
       - equal: {path: "spec.template.spec.initContainers[0].securityContext.runAsUser", value: 0}
-      - equal: {path: "spec.template.spec.initContainers[0].image", value: "ghcr.io/wavelog/wavelog:3.2.4"}
+      - equal: {path: "spec.template.spec.initContainers[0].image", value: "ghcr.io/wavelog/wavelog:3.2.5"}
       - equal:
           path: spec.template.spec.initContainers[0].volumeMounts
           value:

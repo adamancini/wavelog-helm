@@ -1,7 +1,7 @@
 # wavelog
 
 A Helm chart for [Wavelog](https://www.wavelog.org), the web-based amateur radio logbook
-(chart appVersion 3.2.4). It deploys Wavelog with the official MariaDB image, declarative or
+(chart appVersion 3.2.5). It deploys Wavelog with the official MariaDB image, declarative or
 wizard-driven installation, optional API keys, header-based SSO, scheduled database
 backups, and Ingress or Gateway API exposure.
 
